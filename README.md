@@ -1,39 +1,49 @@
 # 3DGS Ball Gyro Playground
 
-3D Gaussian Splatting を背景に使い、モバイルの傾き操作またはタッチ操作でボールを転がして遊ぶ静的 Web プロトタイプです。Spark 2.0 と Three.js を土台にしています。
+A static web prototype that lets you roll a ball with mobile tilt or touch input over a 3D Gaussian Splatting background. It is built on top of the existing Spark 2.0 / Three.js viewer.
 
-## 現在の状態
+## Status
 
-- Phase 1〜6 相当のプロトタイプ実装済み
-- `npm test` / `npm run build` / `npm run check` 通過済み
-- **まだ実機ブラウザ検証は未実施**
-- **この repo / Pages 上のページは未検証ページとして扱ってください**
-- 実機テストは GitHub へ push 後に行う前提です
+- Phase 1–6 style prototype implemented
+- `npm test`, `npm run build`, and `npm run check` pass
+- **Real-device browser testing has not been completed yet**
+- Treat the repo and the published pages as **unverified until tested on actual iPhone / Android devices**
+- Real-device testing is intended to happen after pushing to GitHub
 
-## 主な機能
+## Playable HTML
 
-- 3DGS 背景表示
-- ボール 1 個の簡易物理
-- deviceorientation ベースの傾き入力
-- iPhone 系の motion permission 導線
-- センサー拒否 / 非対応 / タイムアウト時の touch fallback
-- キャリブレーション
-- ゴール・障害物・リセット・タイマー
-- センサー単体確認用の smoke test ページ
+- Main game page: [index.html](https://mistral-yu.github.io/3dgs-ball-gyro-playground/)
+- Sensor smoke test: [sensor-smoke-test.html](https://mistral-yu.github.io/3dgs-ball-gyro-playground/sensor-smoke-test.html)
 
-## 含まれる主要ファイル
+If you run the project locally, the same pages are available at:
 
-- `index.html` — 本体ページ
-- `viewer.js` / `viewer.bundle.js` — viewer とゲーム統合ロジック
-- `viewer.css` — UI / HUD / モバイルレイアウト
-- `ball-game.mjs` — 簡易物理とステージ進行
-- `motion-controls.mjs` — センサー正規化・平滑化・キャリブレーション
-- `touch-controls.mjs` — タッチ fallback 入力
-- `game-ui-state.mjs` — HUD 状態組み立て
-- `sensor-smoke-test.html` / `sensor-smoke-test.js` — センサー検証ページ
-- `tests/` — Node test runner ベースの回帰テスト
+- `http://127.0.0.1:4173/`
+- `http://127.0.0.1:4173/sensor-smoke-test.html`
 
-## ローカル起動
+## Features
+
+- 3DGS background rendering
+- Simple physics for one ball
+- `deviceorientation`-based tilt control
+- iPhone motion permission flow
+- Touch fallback when sensors are denied, unavailable, or time out
+- Calibration
+- Goal, obstacles, reset, and timer
+- Dedicated sensor smoke test page
+
+## Main files
+
+- `index.html` — main game page
+- `viewer.js` / `viewer.bundle.js` — viewer and gameplay integration
+- `viewer.css` — UI, HUD, and mobile layout styles
+- `ball-game.mjs` — simplified physics and stage progression
+- `motion-controls.mjs` — sensor normalization, smoothing, and calibration
+- `touch-controls.mjs` — touch fallback input
+- `game-ui-state.mjs` — HUD state assembly
+- `sensor-smoke-test.html` / `sensor-smoke-test.js` — sensor verification page
+- `tests/` — regression tests built on Node's test runner
+
+## Local run
 
 ```bash
 npm install
@@ -41,19 +51,19 @@ npm run build
 npm run dev
 ```
 
-起動後:
+After the dev server starts:
 
-- 本体: `http://127.0.0.1:4173/`
-- センサー smoke test: `http://127.0.0.1:4173/sensor-smoke-test.html`
+- Main game: `http://127.0.0.1:4173/`
+- Sensor smoke test: `http://127.0.0.1:4173/sensor-smoke-test.html`
 
 ## GitHub Pages
 
-- 公開 URL: `https://mistral-yu.github.io/3dgs-ball-gyro-playground/`
+- Published URL: `https://mistral-yu.github.io/3dgs-ball-gyro-playground/`
 - Pages source: `main` / repository root
-- そのまま静的 HTML として配信できる構成です
-- HTTPS で配信されるので、iPhone の motion permission 導線も Pages 上で使えます
+- The project is designed to be served as static HTML
+- Because Pages is HTTPS, the iPhone motion permission flow also works there
 
-## 検証コマンド
+## Verification commands
 
 ```bash
 npm test
@@ -61,22 +71,21 @@ npm run build
 npm run check
 ```
 
-## 実機検証で見るポイント
+## What to check on a real device
 
-- iPhone Safari で `Enable Motion` から permission を許可できるか
-- Android Chrome で deviceorientation が安定して入るか
-- センサー拒否時に Touch Mode へ自然に切り替わるか
-- キャリブレーション後に静止時の暴れが抑えられるか
-- ゴール・障害物・リセット・タイマーが意図通り動くか
+- Whether iPhone Safari allows motion permission from `Enable Motion`
+- Whether Android Chrome receives stable `deviceorientation` values
+- Whether touch fallback is used naturally when sensors are denied
+- Whether calibration reduces idle jitter
+- Whether the goal, obstacles, reset, and timer behave correctly
 
-## 注意
+## Notes
 
-- 3DGS そのものから高精度コリジョンは作っていません
-- 判定は別ステージの簡易 collider に分離しています
-- 現時点では視覚品質より、導線・入力・安定挙動を優先しています
-- **README 記載時点で実機未検証です**
+- The project does **not** try to derive high-precision collision directly from 3DGS splats
+- Stage collision is separated into lightweight colliders
+- Visual polish is secondary to input flow and stable behavior for the first version
 
-## ライセンス / 参考
+## License / references
 
-- ベース viewer の third-party 情報は `THIRD_PARTY_NOTICES.md` を参照
-- `Bunny` / `dragon` primitive の扱いも同ファイル準拠
+- See `THIRD_PARTY_NOTICES.md` for third-party information from the base viewer
+- The `Bunny` / `dragon` primitives follow the same notice file
