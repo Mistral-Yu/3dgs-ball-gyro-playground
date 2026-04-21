@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Spark 2.0 3DGS Viewer</title>
+  <meta
+    name="description"
+    content="Compact local 3D Gaussian Splatting viewer built with Spark 2.0 and Three.js. Supports direct index.html launch, orbit and first-person navigation, splat transform control, and diagnostic render modes."
+  >
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./viewer.css">
+  <script src="./primitives/mesh-primitive-data.js"></script>
+  <script src="./primitives/primitive-library.js"></script>
+  <script src="./viewer.bundle.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand-block">
+        <p class="eyebrow">Spark 2.0 + Three.js</p>
+        <h1>3DGS Viewer</h1>
+      </div>
+      <p class="header-status" id="status-line">Starting viewer...</p>
+    </header>
+
+    <main class="workspace">
+      <aside class="panel panel-left">
+        <section class="panel-section">
+          <div class="section-heading">
+            <p class="section-label">Navigation</p>
+            <div class="section-title-row">
+              <h2>Camera</h2>
+              <span
+                class="hint-badge"
+                id="mode-description"
+                title="First-person: left drag looks around, right drag pans in screen space, WASD moves, Q/E moves vertically, Shift boosts speed."
+                aria-label="Navigation help"
+              >?</span>
+            </div>
+          </div>
+          <div class="segmented" role="group" aria-label="Camera mode">
+            <button
+              class="segmented-button"
+              type="button"
+              data-mode="orbit"
+              title="Orbit mode: rotate, pan, and zoom around the current focus point."
+            >
+              Orbit
+            </button>
+            <button
+              class="segmented-button is-active"
+              type="button"
+              data-mode="fps"
+              title="First-person mode: fly through the splat with mouse and keyboard navigation."
+            >
+              First-person
+            </button>
+          </div>
+          <div class="button-stack">
+            <button class="toolbar-button" type="button" id="fit-view-button" title="Frame the loaded splat in the viewer.">Fit View</button>
+            <button class="toolbar-button" type="button" id="reset-view-button" title="Return to the saved default camera pose.">Reset View</button>
+          </div>
+          <div class="field-stack compact-fields">
+            <label class="field" title="Set focal length in millimeters. The slider dedicates most travel to the common 5 to 135 mm range and compresses the long telephoto range.">
+              <span>Focal Length</span>
+              <div class="field-inline">
+                <input id="focal-length-range" type="range" min="0" max="1000" step="1" value="119">
+                <input class="text-input short-input" id="focal-length-input" type="text" inputmode="decimal" value="14">
+              </div>
+            </label>
+
+            <label class="field" title="Set absolute first-person movement speed in scene units per second.">
+              <span>Move Speed</span>
+              <input class="text-input short-input" id="move-speed-input" type="text" inputmode="decimal" value="1.00">
+            </label>
+
+            <label class="field" title="Limit the temporary low-FPS preview used while non-exposure values are being adjusted. A final render is submitted when input ends.">
+              <span>Frame Rate</span>
+              <input class="text-input short-input" id="render-fps-input" type="text" inputmode="decimal" value="60">
+            </label>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-heading">
+            <p class="section-label">Actions</p>
+            <div class="section-title-row">
+              <h2>Helpers</h2>
+              <span
+                class="hint-badge"
+                title="Open, generate, clear, and inspect helper overlays for the current splat."
+                aria-label="Helper visibility help"
+              >?</span>
+            </div>
+          </div>
+          <div class="button-stack">
+            <button class="toolbar-button toolbar-button-primary" type="button" id="open-file-button" title="Open a local .ply, .spz, .splat, or .ksplat file.">Open File</button>
+            <label class="field" title="When enabled, Spark 2.0 automatically builds 3DGS LoD data for newly loaded splats. Turn this off to keep the legacy non-LoD load path.">
+              <span>Auto LoD</span>
+              <input id="lod-auto-checkbox" type="checkbox">
+            </label>
+            <label class="field" title="Choose a procedural primitive to add into the scene.">
+              <span>Primitive</span>
+              <select id="primitive-select">
+                <option value="sphere" selected>Sphere</option>
+                <option value="cube">Cube</option>
+                <option value="macbeth">Macbeth</option>
+                <option value="human-1p8m">Human 1.8m</option>
+                <option value="bunny">Bunny</option>
+                <option value="dragon">dragon</option>
+              </select>
+            </label>
+            <button class="toolbar-button" type="button" id="add-primitive-button" title="Add the selected primitive as a new splat item in the scene.">Add Primitive</button>
+            <button class="toolbar-button" type="button" id="clear-scene-button" title="Clear the currently displayed splat from the viewer.">Clear View</button>
+            <button class="toolbar-button" type="button" id="toggle-grid-button" title="Show or hide the ground grid.">Grid</button>
+            <button class="toolbar-button" type="button" id="toggle-axes-button" title="Show or hide the XYZ axes helper.">Axes</button>
+            <button class="toolbar-button" type="button" id="toggle-bounds-button" title="Show or hide the loaded splat bounds box.">Bounds</button>
+            <button class="toolbar-button" type="button" id="toggle-autorotate-button" title="Enable or disable orbit auto-rotation.">Auto Rotate</button>
+          </div>
+          <label class="field" title="Set the displayed grid size manually, or leave it in Auto to adapt to the current scene size.">
+            <span>Grid Size</span>
+            <div class="field-inline">
+              <select id="grid-scale-select">
+                <option value="auto" selected>Auto</option>
+                <option value="1">1</option>
+                <option value="10">10</option>
+                <option value="100">100</option>
+                <option value="custom">Custom</option>
+              </select>
+              <input class="text-input short-input" id="grid-scale-input" type="text" inputmode="decimal" value="1">
+            </div>
+          </label>
+        </section>
+
+      </aside>
+
+      <section class="viewer-panel">
+        <div class="viewer-stage-shell">
+        <div class="viewer-stage" id="viewer-stage">
+          <div class="viewer-overlay viewer-empty" id="empty-state">
+            <p class="empty-kicker">Direct Open Ready</p>
+            <h2>Load a splat.</h2>
+            <p>Use Open File or drag a supported file into the viewport.</p>
+          </div>
+
+          <div class="viewer-overlay viewer-drop" id="drop-overlay" hidden>
+            <p>Drop to load</p>
+          </div>
+
+          <div class="viewer-hud">
+            <div class="hud-cluster">
+              <span class="hud-chip" id="lens-chip">14 mm</span>
+              <span class="hud-chip" id="speed-chip">1.00 u/s</span>
+              <span class="hud-chip" id="colorspace-chip" title="Display output is sRGB. Color grading, authored primitive colors, and point-light math use linear sRGB.">Display sRGB</span>
+            </div>
+            <div class="hud-cluster">
+              <span class="hud-chip" id="fps-chip">FPS -</span>
+              <span class="hud-chip hud-chip-lod" id="lod-chip">LOD Auto Off</span>
+              <span class="hud-chip hud-chip-wide" id="hover-chip" title="Topmost hovered splat values in sRGB display space.">
+                <span class="hover-chip-item" id="hover-chip-item">Item -</span>
+                <span class="hover-chip-sep"> | </span>
+                <span class="hover-chip-color" id="hover-chip-color">Color -</span>
+              </span>
+              <span class="hud-chip" id="grid-chip">Grid -</span>
+              <span class="hud-chip" id="camera-chip">Cam 0.00 / 0.00 / 0.00</span>
+            </div>
+          </div>
+
+          <section class="game-ui" id="game-ui" aria-label="Ball gyro game controls">
+            <div class="game-ui-header">
+              <p class="section-label">Gameplay</p>
+              <div class="hud-cluster game-chip-row">
+                <span class="hud-chip" id="game-timer-chip">Timer 0.00s</span>
+                <span class="hud-chip" id="game-mode-chip">Mode Sensor</span>
+                <span class="hud-chip" id="game-goal-chip">Goal Ahead</span>
+                <span class="hud-chip" id="game-quality-chip">Quality Medium</span>
+              </div>
+            </div>
+            <p class="game-status-text" id="game-status-text">Motion permission is required. Sensor control.</p>
+            <div class="game-button-row">
+              <button class="toolbar-button toolbar-button-primary" type="button" id="game-primary-button">Enable Motion</button>
+              <button class="toolbar-button" type="button" id="game-enable-motion-button">Enable Motion</button>
+              <button class="toolbar-button" type="button" id="game-calibrate-button" hidden>Calibrate</button>
+              <button class="toolbar-button" type="button" id="game-touch-button">Touch Mode</button>
+              <button class="toolbar-button" type="button" id="game-reset-button">Reset</button>
+            </div>
+          </section>
+        </div>
+        <section class="timeline-panel" aria-label="Animation timeline">
+          <div class="timeline-toolbar">
+            <div class="button-pair button-pair-timeline">
+              <button class="toolbar-button toolbar-button-primary" type="button" id="animation-play-button" title="Play the current animation script.">Play</button>
+              <button class="toolbar-button" type="button" id="animation-pause-button" title="Pause animation playback.">Pause</button>
+              <button class="toolbar-button" type="button" id="animation-reset-button" title="Return animation time to the start.">Reset</button>
+              <label class="timeline-loop-toggle" title="Loop playback when the timeline reaches the end.">
+                <input id="animation-loop-checkbox" type="checkbox" checked>
+                <span>Loop</span>
+              </label>
+            </div>
+          </div>
+          <div class="timeline-scrubber-row">
+            <span class="timeline-time" id="animation-time-label">0.00s / 6.00s</span>
+            <input id="animation-time-range" type="range" min="0" max="6" step="0.01" value="0">
+          </div>
+        </section>
+        </div>
+      </section>
+
+      <aside class="panel panel-right">
+        <section class="panel-section inspector-shell">
+          <div class="section-heading">
+            <p class="section-label">Inspector</p>
+            <div class="section-title-row">
+              <span
+                class="hint-badge"
+                title="Switch tabs to manage scene items, apply color grading, inspect metadata, or export splats."
+                aria-label="Inspector help"
+              >?</span>
+            </div>
+          </div>
+          <div class="inspector-tabs" role="tablist" aria-label="Inspector tabs">
+            <button class="segmented-button is-active" type="button" id="tab-scene-button" data-inspector-tab="scene" role="tab" aria-selected="true" title="Splat item visibility, selection, transforms, and render controls.">Splats</button>
+            <button class="segmented-button" type="button" id="tab-color-button" data-inspector-tab="color" role="tab" aria-selected="false" title="Linear color grading controls.">Color</button>
+            <button class="segmented-button" type="button" id="tab-light-button" data-inspector-tab="light" role="tab" aria-selected="false" title="Manage point lights that relight visible splats in beauty mode.">Light</button>
+            <button class="segmented-button" type="button" id="tab-animation-button" data-inspector-tab="animation" role="tab" aria-selected="false" title="Load, edit, save, and play per-splat animation scripts.">Animation</button>
+            <button class="segmented-button" type="button" id="tab-info-button" data-inspector-tab="info" role="tab" aria-selected="false" title="Loaded splat metadata and load progress.">Info</button>
+            <button class="segmented-button" type="button" id="tab-export-button" data-inspector-tab="export" role="tab" aria-selected="false" title="Choose which splats to save.">Export</button>
+          </div>
+
+          <div class="inspector-panels">
+            <section class="inspector-panel is-active" id="inspector-scene" data-inspector-panel="scene" role="tabpanel">
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Splats</p>
+                </div>
+                <div class="scene-controls-row">
+                  <label class="field" title="Limit how many scene rows are visible before the item list starts scrolling.">
+                    <span>Visible Rows</span>
+                    <div class="field-inline">
+                      <input id="scene-limit-range" type="range" min="3" max="14" step="1" value="6">
+                      <input class="text-input short-input" id="scene-limit-input" type="text" inputmode="numeric" value="6">
+                    </div>
+                  </label>
+                  <label class="field" title="Pick the selected splat item from the whole scene list, even if it is outside the current scroll position.">
+                    <span>Splat Select</span>
+                    <div class="field-inline">
+                      <input id="scene-select-range" type="range" min="1" max="1" step="1" value="1">
+                      <input class="text-input short-input" id="scene-select-input" type="text" inputmode="numeric" value="1">
+                    </div>
+                  </label>
+                </div>
+                <div class="scene-list" id="scene-list"></div>
+                <p class="scene-empty" id="scene-empty">No splats in the scene.</p>
+              </div>
+              <div class="field-stack compact-fields" id="scene-render-section">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Render</p>
+                </div>
+                <label class="field" title="Choose the renderer quality preset.">
+                  <span>Quality</span>
+                  <select id="quality-select">
+                    <option value="fast">Fast</option>
+                    <option value="balanced" selected>Balanced</option>
+                    <option value="sharp">Sharp</option>
+                  </select>
+                </label>
+
+                <label class="field" title="Switch the viewer background palette.">
+                  <span>Background</span>
+                  <select id="background-select">
+                    <option value="graphite" selected>Graphite</option>
+                    <option value="dawn">Dawn</option>
+                    <option value="museum">Museum</option>
+                    <option value="studio">Studio</option>
+                  </select>
+                </label>
+
+                <label class="field" title="Switch between beauty shading and diagnostic views generated from the loaded splats.">
+                  <span>Render Mode</span>
+                  <select id="render-mode-select">
+                    <option value="beauty" selected>Beauty</option>
+                    <option value="depth">Depth</option>
+                    <option value="position">Position</option>
+                    <option value="worldNormal">World Normal</option>
+                  </select>
+                </label>
+
+                <label class="field" id="depth-range-field" title="Adjust the normalization used by the active diagnostic mode.">
+                  <span id="normalize-range-label">Depth Max</span>
+                  <div class="field-inline">
+                    <input id="depth-range-range" type="range" min="0.1" max="100" step="0.1" value="10">
+                    <input class="text-input short-input" id="depth-range-input" type="text" inputmode="decimal" value="10.0">
+                  </div>
+                </label>
+
+                <label class="field" title="Adjust the loaded splat opacity. Values above the slider range can be typed directly.">
+                  <span>Opacity</span>
+                  <div class="field-inline">
+                    <input id="opacity-range" type="range" min="0" max="2" step="0.05" value="1">
+                    <input class="text-input short-input" id="opacity-input" type="text" inputmode="decimal" value="1.00">
+                  </div>
+                </label>
+
+                <label class="field" title="Adjust Spark renderer Gaussian falloff. Spark exposes this as a renderer-wide setting. Values above the slider range can be typed directly.">
+                  <span>Falloff</span>
+                  <div class="field-inline">
+                    <input id="falloff-range" type="range" min="0" max="8" step="0.05" value="1">
+                    <input class="text-input short-input" id="falloff-input" type="text" inputmode="decimal" value="1.00">
+                  </div>
+                </label>
+
+                <label class="field" title="Select the spherical harmonics level used for shading.">
+                  <span>SH Level</span>
+                  <select id="sh-select">
+                    <option value="0">SH0</option>
+                    <option value="1">SH1</option>
+                    <option value="2">SH2</option>
+                    <option value="3" selected>SH3</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="field-stack" id="scene-transform-section">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Transform</p>
+                  <div class="section-title-row">
+                    <span
+                      class="hint-badge"
+                      title="Rotate, translate, and scale the loaded splat around its own center with explicit numeric values."
+                      aria-label="Splat transform help"
+                    >?</span>
+                  </div>
+                </div>
+                <div class="button-pair button-pair-compact">
+                  <button class="toolbar-button" type="button" id="toggle-gizmo-button" title="Show or hide the transform gizmo for the selected splat item.">Gizmo Off</button>
+                  <button class="toolbar-button" type="button" id="gizmo-translate-button" title="Use translate arrows on the selected splat item.">Move</button>
+                  <button class="toolbar-button" type="button" id="gizmo-rotate-button" title="Use rotation rings on the selected splat item.">Rotate</button>
+                  <button class="toolbar-button" type="button" id="gizmo-scale-button" title="Use scale handles on the selected splat item.">Scale</button>
+                </div>
+                <p class="inline-label">Rotate</p>
+                <div class="transform-row transform-row-quad">
+                  <label class="field" title="Rotate the splat around the X axis in degrees.">
+                    <span>X</span>
+                    <input class="text-input" id="rotation-x-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Rotate the splat around the Y axis in degrees.">
+                    <span>Y</span>
+                    <input class="text-input" id="rotation-y-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Rotate the splat around the Z axis in degrees.">
+                    <span>Z</span>
+                    <input class="text-input" id="rotation-z-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Scale the splat uniformly in XYZ.">
+                    <span>Scale</span>
+                    <input class="text-input" id="scale-input" type="text" inputmode="decimal" value="1">
+                  </label>
+                </div>
+                <p class="inline-label">Move</p>
+                <div class="transform-row">
+                  <label class="field" title="Translate the splat along the X axis.">
+                    <span>Move X</span>
+                    <input class="text-input" id="translate-x-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Translate the splat along the Y axis.">
+                    <span>Y</span>
+                    <input class="text-input" id="translate-y-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Translate the splat along the Z axis.">
+                    <span>Z</span>
+                    <input class="text-input" id="translate-z-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                </div>
+                <div class="button-stack">
+                  <button class="toolbar-button" type="button" id="reset-rotation-button" title="Reset the splat transform back to the default values.">Reset Transform</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="inspector-panel" id="inspector-info" data-inspector-panel="info" role="tabpanel" hidden>
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Item</p>
+                </div>
+                <p class="info-item-name" id="info-item-name">No file loaded</p>
+              </div>
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Status</p>
+                </div>
+                <p class="progress-label" id="progress-label">Open a local file or load the bundled sample.</p>
+                <div class="progress-track" id="progress-track" aria-hidden="true">
+                  <span class="progress-fill" id="progress-fill"></span>
+                </div>
+              </div>
+
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Info</p>
+                </div>
+                <dl class="info-grid">
+                  <div>
+                    <dt>Selection</dt>
+                    <dd id="info-name">No file loaded</dd>
+                  </div>
+                  <div>
+                    <dt>Format</dt>
+                    <dd id="info-format">-</dd>
+                  </div>
+                  <div>
+                    <dt>Source</dt>
+                    <dd id="info-source">Waiting for input</dd>
+                  </div>
+                  <div>
+                    <dt>Auto-LoD</dt>
+                    <dd id="info-auto-lod">Enabled</dd>
+                  </div>
+                  <div>
+                    <dt>Load Mode</dt>
+                    <dd id="info-load-mode">Full-res only</dd>
+                  </div>
+                  <div>
+                    <dt>Size</dt>
+                    <dd id="info-size">-</dd>
+                  </div>
+                  <div>
+                    <dt>Splats</dt>
+                    <dd id="info-splats">-</dd>
+                  </div>
+                  <div>
+                    <dt>Load Time</dt>
+                    <dd id="info-load-time">-</dd>
+                  </div>
+                  <div>
+                    <dt>Center</dt>
+                    <dd id="info-center">-</dd>
+                  </div>
+                  <div>
+                    <dt>Bounds</dt>
+                    <dd id="info-bounds">-</dd>
+                  </div>
+                  <div>
+                    <dt>Scale Range</dt>
+                    <dd id="info-scale-range">-</dd>
+                  </div>
+                  <div>
+                    <dt>SH Degree</dt>
+                    <dd id="info-sh-degree">-</dd>
+                  </div>
+                  <div>
+                    <dt>Active SH</dt>
+                    <dd id="info-sh-active">-</dd>
+                  </div>
+                  <div>
+                    <dt>Compression</dt>
+                    <dd id="info-compression">-</dd>
+                  </div>
+                  <div>
+                    <dt>Est. Ratio</dt>
+                    <dd id="info-compression-ratio">-</dd>
+                  </div>
+                  <div>
+                    <dt>Encoding</dt>
+                    <dd id="info-encoding">-</dd>
+                  </div>
+                  <div>
+                    <dt>Packed Cap</dt>
+                    <dd id="info-packed-capacity">-</dd>
+                  </div>
+                </dl>
+              </div>
+            </section>
+
+            <section class="inspector-panel" id="inspector-color" data-inspector-panel="color" role="tabpanel" hidden>
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Color</p>
+                </div>
+                <label class="field" title="Linear exposure in stops. Each +1 stop doubles linear scene radiance before output conversion.">
+                  <span>Scene Exposure</span>
+                  <div class="field-inline">
+                    <input id="exposure-range" type="range" min="-6" max="6" step="0.1" value="0">
+                    <input class="text-input short-input" id="exposure-input" type="text" inputmode="decimal" value="0.0">
+                  </div>
+                </label>
+                <div class="field-stack compact-fields tone-curve-panel">
+                  <div class="section-heading section-heading-sub">
+                    <p class="section-label">Color</p>
+                  </div>
+                  <p class="progress-label">Edit a point-based tone curve in linear sRGB. Master affects all channels, then Red / Green / Blue can be shaped individually.</p>
+                  <label class="field" title="Choose which linear sRGB curve to edit.">
+                    <span>Edit Channel</span>
+                    <select id="tone-curve-channel-select">
+                      <option value="master" selected>Master</option>
+                      <option value="red">Red</option>
+                      <option value="green">Green</option>
+                      <option value="blue">Blue</option>
+                    </select>
+                  </label>
+                  <div class="tone-curve-editor">
+                    <svg class="tone-curve-graph" id="tone-curve-graph" viewBox="0 0 100 100" role="img" aria-label="Tone curve graph"></svg>
+                    <div class="tone-curve-toolbar">
+                      <div class="button-pair button-pair-compact">
+                        <button class="toolbar-button" type="button" id="tone-curve-add-point-button" title="Add a new control point near the center of the active curve.">Add Point</button>
+                        <button class="toolbar-button" type="button" id="tone-curve-remove-point-button" title="Remove the selected control point from the active curve.">Remove Point</button>
+                      </div>
+                      <div class="transform-row transform-row-dual">
+                        <label class="field" title="Selected point input position on the tone curve.">
+                          <span>Point X</span>
+                          <input class="text-input" id="tone-curve-point-x-input" type="text" inputmode="decimal" value="1.000">
+                        </label>
+                        <label class="field" title="Selected point output value on the tone curve.">
+                          <span>Point Y</span>
+                          <input class="text-input" id="tone-curve-point-y-input" type="text" inputmode="decimal" value="1.000">
+                        </label>
+                      </div>
+                      <div class="tone-curve-point-list" id="tone-curve-point-list" aria-live="polite"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Color</p>
+                </div>
+                <label class="field" title="Linear exposure in stops for only the selected splat item.">
+                  <span>Selected Exposure</span>
+                  <div class="field-inline">
+                    <input id="selected-exposure-range" type="range" min="-6" max="6" step="0.1" value="0">
+                    <input class="text-input short-input" id="selected-exposure-input" type="text" inputmode="decimal" value="0.0">
+                  </div>
+                </label>
+              </div>
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Picked</p>
+                </div>
+                <div class="button-pair">
+                  <button class="toolbar-button" type="button" id="pick-color-button" title="Store the last hovered frontmost splat color from the 3D view.">Pick Hovered</button>
+                  <button class="toolbar-button" type="button" id="clear-picked-colors-button" title="Clear all picked splat colors from this tab.">Clear Picks</button>
+                </div>
+                <div class="picked-color-list" id="picked-colors-list"></div>
+                <p class="scene-empty" id="picked-colors-empty">No picked splat colors.</p>
+              </div>
+            </section>
+
+            <section class="inspector-panel" id="inspector-light" data-inspector-panel="light" role="tabpanel" hidden>
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Light</p>
+                </div>
+                <div class="button-stack">
+                  <button class="toolbar-button" type="button" id="add-point-light-button" title="Add a new point light to the scene.">Add Point Light</button>
+                </div>
+                <div class="scene-list" id="light-list"></div>
+                <p class="scene-empty" id="light-empty">No point lights in the scene.</p>
+              </div>
+
+              <div class="field-stack" id="light-controls-section">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Light</p>
+                </div>
+                <p class="info-item-name" id="light-name">No light selected</p>
+                <div class="button-stack">
+                  <button class="toolbar-button" type="button" id="light-gizmo-button" title="Show or hide the move gizmo for the selected point light.">Move Gizmo Off</button>
+                </div>
+                <label class="field" title="Adjust point-light intensity. Values above the slider range can be typed directly.">
+                  <span>Intensity</span>
+                  <div class="field-inline">
+                    <input id="light-intensity-range" type="range" min="0" max="100" step="0.1" value="20">
+                    <input class="text-input short-input" id="light-intensity-input" type="text" inputmode="decimal" value="20.0">
+                  </div>
+                </label>
+                <label class="field" title="Scale the displayed point-light helper only. This does not change lighting calculations.">
+                  <span>Helper Size</span>
+                  <div class="field-inline">
+                    <input id="light-helper-scale-range" type="range" min="0.1" max="8" step="0.05" value="0.1">
+                    <input class="text-input short-input" id="light-helper-scale-input" type="text" inputmode="decimal" value="0.10">
+                  </div>
+                </label>
+                <div class="transform-row">
+                  <label class="field" title="Linear sRGB red channel for the selected point light.">
+                    <span>R</span>
+                    <input class="text-input" id="light-r-input" type="text" inputmode="decimal" value="1.000">
+                  </label>
+                  <label class="field" title="Linear sRGB green channel for the selected point light.">
+                    <span>G</span>
+                    <input class="text-input" id="light-g-input" type="text" inputmode="decimal" value="0.700">
+                  </label>
+                  <label class="field" title="Linear sRGB blue channel for the selected point light.">
+                    <span>B</span>
+                    <input class="text-input" id="light-b-input" type="text" inputmode="decimal" value="0.450">
+                  </label>
+                </div>
+                <div class="transform-row">
+                  <label class="field" title="Move the selected light along the X axis.">
+                    <span>X</span>
+                    <input class="text-input" id="light-x-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Move the selected light along the Y axis.">
+                    <span>Y</span>
+                    <input class="text-input" id="light-y-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Move the selected light along the Z axis.">
+                    <span>Z</span>
+                    <input class="text-input" id="light-z-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section class="inspector-panel" id="inspector-animation" data-inspector-panel="animation" role="tabpanel" hidden>
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Animation</p>
+                </div>
+                <label class="field" title="Choose a built-in animation preset script.">
+                  <span>Preset</span>
+                  <div class="field-inline field-inline-actions">
+                    <select id="animation-preset-select">
+                      <option value="explosion" selected>Splat Explosion</option>
+                      <option value="reveal">Splat Reveal</option>
+                    </select>
+                    <button class="toolbar-button" type="button" id="animation-load-preset-button" title="Load the selected preset into the script editor.">Load Preset</button>
+                  </div>
+                </label>
+                <div class="button-pair">
+                  <button class="toolbar-button" type="button" id="animation-open-button" title="Load an animation script JS file from this device into the script editor.">Load Script</button>
+                  <button class="toolbar-button" type="button" id="animation-save-button" title="Save the currently displayed animation script JS file to this device.">Save Script</button>
+                </div>
+                <div class="button-pair">
+                  <button class="toolbar-button toolbar-button-primary" type="button" id="animation-apply-button" title="Apply the script currently shown in the editor to the loaded splats.">Apply Script</button>
+                  <button class="toolbar-button" type="button" id="animation-copy-default-button" title="Clear the current animation script so no animation is applied.">No Script</button>
+                </div>
+                <label class="field" title="Choose whether the active animation starts from the splat centroid or a manually specified point.">
+                  <span>Explosion Origin</span>
+                  <select id="animation-origin-mode-select">
+                    <option value="centroid" selected>Centroid</option>
+                    <option value="manual">Manual</option>
+                  </select>
+                </label>
+                <div class="transform-row">
+                  <label class="field" title="Manual animation origin X coordinate.">
+                    <span>Origin X</span>
+                    <input class="text-input" id="animation-origin-x-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Manual animation origin Y coordinate.">
+                    <span>Y</span>
+                    <input class="text-input" id="animation-origin-y-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                  <label class="field" title="Manual animation origin Z coordinate.">
+                    <span>Z</span>
+                    <input class="text-input" id="animation-origin-z-input" type="text" inputmode="decimal" value="0">
+                  </label>
+                </div>
+              </div>
+
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Animation</p>
+                </div>
+                <label class="field" title="Edit the current animation script source, including parameter values and movement code, then apply it to the loaded splats.">
+                  <span>Script Source</span>
+                  <textarea class="script-editor" id="animation-script-editor" spellcheck="false" rows="24"></textarea>
+                </label>
+                <p class="progress-label" id="animation-script-status">No animation script loaded. Use Splat Explosion, load a script, or keep animation off.</p>
+              </div>
+            </section>
+
+            <section class="inspector-panel" id="inspector-export" data-inspector-panel="export" role="tabpanel" hidden>
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Export</p>
+                </div>
+                <p class="progress-label">Current export format: normal binary PLY.</p>
+                <label class="field" title="Apply the selected splat opacity to exported alpha values.">
+                  <span>Opacity</span>
+                  <input id="export-opacity-checkbox" type="checkbox" checked>
+                </label>
+                <label class="field" title="Write the selected splat falloff value as a PLY comment. Gaussian PLY has no standard falloff property.">
+                  <span>Falloff</span>
+                  <input id="export-falloff-checkbox" type="checkbox" checked>
+                </label>
+                <label class="field" title="Write active and loaded SH levels as PLY comments. Exported colors remain SH0-compatible f_dc values.">
+                  <span>SH</span>
+                  <input id="export-sh-checkbox" type="checkbox" checked>
+                </label>
+              </div>
+
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Export</p>
+                </div>
+                <div class="button-pair">
+                  <button class="toolbar-button" type="button" id="export-enable-all-button" title="Mark every scene splat for export.">All On</button>
+                  <button class="toolbar-button" type="button" id="export-disable-all-button" title="Clear every scene splat from export selection.">All Off</button>
+                </div>
+                <div class="scene-list" id="export-list"></div>
+                <p class="scene-empty" id="export-empty">No splats available for export.</p>
+              </div>
+
+              <div class="field-stack">
+                <div class="section-heading section-heading-sub">
+                  <p class="section-label">Export</p>
+                </div>
+                <div class="button-stack">
+                  <button class="toolbar-button" type="button" id="save-scene-splats-button" title="Save the selected scene splats as normal PLY files with the current transform and color edits applied.">Save Scene - Splats</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <input id="file-input" type="file" accept=".ply,.spz,.splat,.ksplat" hidden>
+  <input id="animation-file-input" type="file" accept=".js,.mjs,.json,.txt" hidden>
+</body>
+</html>

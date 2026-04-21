@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>3DGS Ball Gyro Sensor Smoke Test</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #061019;
+      color: #eef5ff;
+    }
+    body {
+      margin: 0;
+      min-height: 100svh;
+      padding: 20px;
+      background: radial-gradient(circle at top, rgba(97, 163, 255, 0.14), transparent 36%), linear-gradient(180deg, #09111a 0%, #04080e 100%);
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      padding: 16px;
+      border: 1px solid rgba(127, 240, 215, 0.22);
+      border-radius: 18px;
+      background: rgba(8, 14, 22, 0.82);
+      backdrop-filter: blur(12px);
+    }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    button {
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid rgba(127, 240, 215, 0.26);
+      border-radius: 999px;
+      background: rgba(12, 21, 32, 0.78);
+      color: inherit;
+      font: inherit;
+    }
+    dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 8px 12px;
+      margin: 0;
+    }
+    dt { color: #9aa8b9; }
+    dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+  <script type="module" src="./sensor-smoke-test.js"></script>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <p>Use this page before real-device gameplay testing. It only verifies motion permission flow, calibration, and filtered beta/gamma output.</p>
+      <div class="buttons">
+        <button id="enable-motion-button" type="button">Enable Motion</button>
+        <button id="calibrate-button" type="button">Calibrate</button>
+        <button id="touch-mode-button" type="button">Force Touch Fallback</button>
+      </div>
+    </section>
+    <section class="card">
+      <dl>
+        <dt>Status</dt><dd id="status-value">Waiting</dd>
+        <dt>Permission</dt><dd id="permission-value">unknown</dd>
+        <dt>Mode</dt><dd id="mode-value">sensor</dd>
+        <dt>Raw Beta</dt><dd id="raw-beta-value">0</dd>
+        <dt>Raw Gamma</dt><dd id="raw-gamma-value">0</dd>
+        <dt>Filtered X</dt><dd id="filtered-x-value">0</dd>
+        <dt>Filtered Z</dt><dd id="filtered-z-value">0</dd>
+      </dl>
+    </section>
+  </main>
+</body>
+</html>
