@@ -46,6 +46,13 @@ npm run dev
 - 本体: `http://127.0.0.1:4173/`
 - センサー smoke test: `http://127.0.0.1:4173/sensor-smoke-test.html`
 
+## GitHub Pages
+
+- 公開 URL: `https://mistral-yu.github.io/3dgs-ball-gyro-playground/`
+- Pages source: `main` / repository root
+- そのまま静的 HTML として配信できる構成です
+- HTTPS で配信されるので、iPhone の motion permission 導線も Pages 上で使えます
+
 ## 検証コマンド
 
 ```bash
