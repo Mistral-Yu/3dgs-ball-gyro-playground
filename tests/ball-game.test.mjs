@@ -41,6 +41,16 @@ test('stepGameState integrates persistent acceleration from the active input vec
   assert.ok(next.elapsedMs > 400);
 });
 
+test('stepGameState feels like gravity by building strong downhill speed from sustained tilt', () => {
+  const stage = createDefaultStage();
+  const state = createDefaultGameState(stage);
+  const next = advance(state, { x: 1, z: 0 }, 12);
+  const speed = Math.hypot(next.ball.velocity.x, next.ball.velocity.z);
+
+  assert.ok(speed >= 0.7, `expected stronger downhill speed, got ${speed}`);
+  assert.ok(next.ball.position.x >= stage.spawn.x + 0.06, `expected stronger downhill travel, got ${next.ball.position.x}`);
+});
+
 test('stepGameState returns to idle once the ball has fully settled so the next run can start without reset', () => {
   const stage = createDefaultStage();
   const state = {

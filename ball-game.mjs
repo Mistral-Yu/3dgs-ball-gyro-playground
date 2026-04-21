@@ -2,9 +2,9 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const length2 = (x, z) => Math.hypot(x, z);
 
 export const DEFAULT_GAME_CONFIG = {
-  acceleration: 6.5,
-  accelerationResponsiveness: 7.5,
-  damping: 0.92,
+  acceleration: 12,
+  accelerationResponsiveness: 18,
+  damping: 0.96,
   restitution: 0.68,
   maxSpeed: 5.5,
   obstacleBounce: 0.72,
