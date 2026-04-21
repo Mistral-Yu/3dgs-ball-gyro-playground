@@ -80,12 +80,52 @@ test('default stage exposes both splat and mesh gameplay obstacles', () => {
 
   assert.ok(Array.isArray(stage.splatObstacles));
   assert.ok(Array.isArray(stage.meshObstacles));
+  assert.ok(Array.isArray(stage.additionalCollisionObstacles));
   assert.ok(stage.splatObstacles.length > 0);
   assert.ok(stage.meshObstacles.length > 0);
   assert.equal(
     getStageCollisionObstacles(stage).length,
-    stage.splatObstacles.length + stage.meshObstacles.length,
+    stage.splatObstacles.length + stage.meshObstacles.length + stage.additionalCollisionObstacles.length,
   );
+});
+
+test('getStageCollisionObstacles includes additional scene-driven colliders', () => {
+  const stage = createDefaultStage({
+    splatObstacles: [{ x: 0, z: 0, radius: 0.45 }],
+    meshObstacles: [{ x: 1.4, z: 0, radius: 0.4 }],
+    additionalCollisionObstacles: [{ x: -1.1, z: 1.2, halfSizeX: 0.55, halfSizeZ: 0.35, rotation: Math.PI / 8, shape: 'box', kind: 'scene-item' }],
+  });
+
+  assert.deepEqual(getStageCollisionObstacles(stage), [
+    { x: 0, z: 0, radius: 0.45, kind: 'splat' },
+    { x: 1.4, z: 0, radius: 0.4, kind: 'mesh' },
+    { x: -1.1, z: 1.2, halfSizeX: 0.55, halfSizeZ: 0.35, rotation: Math.PI / 8, shape: 'box', kind: 'scene-item' },
+  ]);
+});
+
+test('stepGameState resolves collisions against box colliders without letting the ball enter the box footprint', () => {
+  const stage = createDefaultStage({
+    splatObstacles: [],
+    meshObstacles: [],
+    additionalCollisionObstacles: [
+      { x: 0, z: 0, halfSizeX: 0.5, halfSizeZ: 0.35, rotation: 0, shape: 'box', kind: 'scene-item' },
+    ],
+    goal: { x: 2.6, z: 2.6, radius: 0.35 },
+  });
+  const initial = createDefaultGameState(stage);
+  const state = {
+    ...initial,
+    status: 'playing',
+    ball: {
+      ...initial.ball,
+      position: { x: -0.9, y: 0.35, z: 0 },
+      velocity: { x: 5.2, y: 0, z: 0 },
+    },
+  };
+  const next = stepGameState(state, { x: 0, z: 0 }, 1 / 4, DEFAULT_GAME_CONFIG);
+
+  assert.ok(next.ball.position.x <= -0.5 - next.ball.radius + 1e-6, `ball entered box footprint: ${next.ball.position.x}`);
+  assert.ok(next.ball.velocity.x <= 0, `expected reflected x velocity, got ${next.ball.velocity.x}`);
 });
 
 test('stepGameState resolves collisions against both splat and mesh obstacles', () => {

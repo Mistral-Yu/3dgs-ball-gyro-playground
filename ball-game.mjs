@@ -26,26 +26,35 @@ export function createDefaultStage(overrides = {}) {
     meshObstacles: [
       { x: 0.9, z: 1.15, radius: 0.38, kind: 'mesh' },
     ],
+    additionalCollisionObstacles: [],
     ...overrides,
   };
   const splatObstacles = Array.isArray(stage.splatObstacles) ? stage.splatObstacles.map((obstacle) => ({ ...obstacle, kind: 'splat' })) : [];
   const meshObstacles = Array.isArray(stage.meshObstacles) ? stage.meshObstacles.map((obstacle) => ({ ...obstacle, kind: 'mesh' })) : [];
+  const additionalCollisionObstacles = Array.isArray(stage.additionalCollisionObstacles)
+    ? stage.additionalCollisionObstacles.map((obstacle) => ({ ...obstacle, kind: obstacle.kind || 'scene-item' }))
+    : [];
   const legacyObstacles = Array.isArray(stage.obstacles) ? stage.obstacles : [];
   return {
     ...stage,
     splatObstacles,
     meshObstacles,
+    additionalCollisionObstacles,
     obstacles: legacyObstacles.length > 0 ? legacyObstacles : [...splatObstacles, ...meshObstacles],
   };
 }
 
 export function getStageCollisionObstacles(stage = createDefaultStage()) {
+  const additionalCollisionObstacles = Array.isArray(stage.additionalCollisionObstacles)
+    ? stage.additionalCollisionObstacles
+    : [];
   if (Array.isArray(stage.obstacles) && stage.obstacles.length > 0) {
-    return stage.obstacles;
+    return [...stage.obstacles, ...additionalCollisionObstacles];
   }
   return [
     ...(Array.isArray(stage.splatObstacles) ? stage.splatObstacles : []),
     ...(Array.isArray(stage.meshObstacles) ? stage.meshObstacles : []),
+    ...additionalCollisionObstacles,
   ];
 }
 
@@ -86,7 +95,16 @@ const clampVelocity = (velocity, maxSpeed) => {
   };
 };
 
-const resolveObstacleCollision = (ball, obstacle, bounce) => {
+const reflectVelocity = (velocity, nx, nz, bounce) => {
+  const velocityAlongNormal = (velocity.x * nx) + (velocity.z * nz);
+  return {
+    ...velocity,
+    x: velocity.x - ((1 + bounce) * velocityAlongNormal * nx),
+    z: velocity.z - ((1 + bounce) * velocityAlongNormal * nz),
+  };
+};
+
+const resolveCircleObstacleCollision = (ball, obstacle, bounce) => {
   const dx = ball.position.x - obstacle.x;
   const dz = ball.position.z - obstacle.z;
   const distance = length2(dx, dz) || 1e-6;
@@ -97,9 +115,6 @@ const resolveObstacleCollision = (ball, obstacle, bounce) => {
   const nx = dx / distance;
   const nz = dz / distance;
   const overlap = minimumDistance - distance;
-  const velocityAlongNormal = (ball.velocity.x * nx) + (ball.velocity.z * nz);
-  const reflectedX = ball.velocity.x - ((1 + bounce) * velocityAlongNormal * nx);
-  const reflectedZ = ball.velocity.z - ((1 + bounce) * velocityAlongNormal * nz);
   return {
     ...ball,
     position: {
@@ -107,12 +122,65 @@ const resolveObstacleCollision = (ball, obstacle, bounce) => {
       x: ball.position.x + (nx * overlap),
       z: ball.position.z + (nz * overlap),
     },
-    velocity: {
-      ...ball.velocity,
-      x: reflectedX,
-      z: reflectedZ,
-    },
+    velocity: reflectVelocity(ball.velocity, nx, nz, bounce),
   };
+};
+
+const resolveBoxObstacleCollision = (ball, obstacle, bounce) => {
+  const rotation = Number(obstacle.rotation) || 0;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const relX = ball.position.x - obstacle.x;
+  const relZ = ball.position.z - obstacle.z;
+  const localX = (relX * cos) + (relZ * sin);
+  const localZ = (-relX * sin) + (relZ * cos);
+  const halfSizeX = Math.max(Number(obstacle.halfSizeX) || 0, 0.001);
+  const halfSizeZ = Math.max(Number(obstacle.halfSizeZ) || 0, 0.001);
+  const clampedX = clamp(localX, -halfSizeX, halfSizeX);
+  const clampedZ = clamp(localZ, -halfSizeZ, halfSizeZ);
+  let deltaX = localX - clampedX;
+  let deltaZ = localZ - clampedZ;
+  let distance = length2(deltaX, deltaZ);
+
+  if (distance < ball.radius) {
+    if (distance <= 1e-6) {
+      const gapX = halfSizeX - Math.abs(localX);
+      const gapZ = halfSizeZ - Math.abs(localZ);
+      if (gapX < gapZ) {
+        deltaX = localX >= 0 ? 1 : -1;
+        deltaZ = 0;
+        distance = Math.max(gapX, 0);
+      } else {
+        deltaX = 0;
+        deltaZ = localZ >= 0 ? 1 : -1;
+        distance = Math.max(gapZ, 0);
+      }
+    }
+
+    const nxLocal = deltaX / Math.max(distance, 1e-6);
+    const nzLocal = deltaZ / Math.max(distance, 1e-6);
+    const pushDistance = ball.radius - distance;
+    const worldNx = (nxLocal * cos) - (nzLocal * sin);
+    const worldNz = (nxLocal * sin) + (nzLocal * cos);
+    return {
+      ...ball,
+      position: {
+        ...ball.position,
+        x: ball.position.x + (worldNx * pushDistance),
+        z: ball.position.z + (worldNz * pushDistance),
+      },
+      velocity: reflectVelocity(ball.velocity, worldNx, worldNz, bounce),
+    };
+  }
+
+  return ball;
+};
+
+const resolveObstacleCollision = (ball, obstacle, bounce) => {
+  if (obstacle?.shape === 'box') {
+    return resolveBoxObstacleCollision(ball, obstacle, bounce);
+  }
+  return resolveCircleObstacleCollision(ball, obstacle, bounce);
 };
 
 export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, config = DEFAULT_GAME_CONFIG) {
@@ -134,49 +202,60 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
   let ball = {
     ...safeState.ball,
     velocity: {
-      x: safeState.ball.velocity.x + (inputX * acceleration * deltaSeconds),
+      ...safeState.ball.velocity,
       y: 0,
-      z: safeState.ball.velocity.z + (inputZ * acceleration * deltaSeconds),
     },
   };
-  ball.velocity = clampVelocity(ball.velocity, Number(config.maxSpeed) || DEFAULT_GAME_CONFIG.maxSpeed);
-  ball.velocity = {
-    ...ball.velocity,
-    x: ball.velocity.x * damping,
-    z: ball.velocity.z * damping,
-  };
-  ball.position = {
-    ...ball.position,
-    x: ball.position.x + (ball.velocity.x * deltaSeconds),
-    z: ball.position.z + (ball.velocity.z * deltaSeconds),
-  };
+  const maxSpeed = Number(config.maxSpeed) || DEFAULT_GAME_CONFIG.maxSpeed;
+  const minSubstep = 1 / 120;
+  const substeps = Math.max(1, Math.ceil(deltaSeconds / minSubstep));
+  const substepSeconds = deltaSeconds / substeps;
 
-  const minX = stage.bounds.minX + ball.radius;
-  const maxX = stage.bounds.maxX - ball.radius;
-  const minZ = stage.bounds.minZ + ball.radius;
-  const maxZ = stage.bounds.maxZ - ball.radius;
+  for (let stepIndex = 0; stepIndex < substeps; stepIndex += 1) {
+    ball.velocity = {
+      x: ball.velocity.x + (inputX * acceleration * substepSeconds),
+      y: 0,
+      z: ball.velocity.z + (inputZ * acceleration * substepSeconds),
+    };
+    ball.velocity = clampVelocity(ball.velocity, maxSpeed);
+    ball.velocity = {
+      ...ball.velocity,
+      x: ball.velocity.x * damping,
+      z: ball.velocity.z * damping,
+    };
+    ball.position = {
+      ...ball.position,
+      x: ball.position.x + (ball.velocity.x * substepSeconds),
+      z: ball.position.z + (ball.velocity.z * substepSeconds),
+    };
 
-  if (ball.position.x < minX) {
-    ball.position.x = minX;
-    ball.velocity.x = Math.abs(ball.velocity.x) * restitution;
-  }
-  if (ball.position.x > maxX) {
-    ball.position.x = maxX;
-    ball.velocity.x = -Math.abs(ball.velocity.x) * restitution;
-  }
-  if (ball.position.z < minZ) {
-    ball.position.z = minZ;
-    ball.velocity.z = Math.abs(ball.velocity.z) * restitution;
-  }
-  if (ball.position.z > maxZ) {
-    ball.position.z = maxZ;
-    ball.velocity.z = -Math.abs(ball.velocity.z) * restitution;
-  }
+    const minX = stage.bounds.minX + ball.radius;
+    const maxX = stage.bounds.maxX - ball.radius;
+    const minZ = stage.bounds.minZ + ball.radius;
+    const maxZ = stage.bounds.maxZ - ball.radius;
 
-  const collisionObstacles = getStageCollisionObstacles(stage);
-  for (let pass = 0; pass < Math.max(collisionObstacles.length, 1); pass += 1) {
-    for (const obstacle of collisionObstacles) {
-      ball = resolveObstacleCollision(ball, obstacle, obstacleBounce);
+    if (ball.position.x < minX) {
+      ball.position.x = minX;
+      ball.velocity.x = Math.abs(ball.velocity.x) * restitution;
+    }
+    if (ball.position.x > maxX) {
+      ball.position.x = maxX;
+      ball.velocity.x = -Math.abs(ball.velocity.x) * restitution;
+    }
+    if (ball.position.z < minZ) {
+      ball.position.z = minZ;
+      ball.velocity.z = Math.abs(ball.velocity.z) * restitution;
+    }
+    if (ball.position.z > maxZ) {
+      ball.position.z = maxZ;
+      ball.velocity.z = -Math.abs(ball.velocity.z) * restitution;
+    }
+
+    const collisionObstacles = getStageCollisionObstacles(stage);
+    for (let pass = 0; pass < Math.max(collisionObstacles.length, 1); pass += 1) {
+      for (const obstacle of collisionObstacles) {
+        ball = resolveObstacleCollision(ball, obstacle, obstacleBounce);
+      }
     }
   }
 

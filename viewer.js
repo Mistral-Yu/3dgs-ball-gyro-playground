@@ -859,18 +859,19 @@ function startSparkViewer() {
     };
 
     const createGameplayPrimitiveSpec = async ({
-      alpha = 0.92,
+      alpha = null,
       colorHex = null,
       kind = "sphere",
       radius = 1,
     } = {}) => {
       const definition = await createPrimitiveSpec(kind);
       const scaledRadius = Math.max(Number(radius) || 1, 0.01);
+      const overrideAlpha = Number.isFinite(alpha) ? alpha : null;
       const overrideColor = colorHex == null ? null : new THREE.Color(colorHex);
       const scaleVector = new THREE.Vector3(scaledRadius, scaledRadius, scaledRadius);
       const splats = definition.splatDefinitions.map((splat) => ({
         ...splat,
-        alpha,
+        alpha: overrideAlpha ?? splat.alpha,
         color: overrideColor ? overrideColor.clone() : splat.color.clone(),
         position: splat.position.clone().multiply(scaleVector),
         scale: splat.scale.clone().multiplyScalar(scaledRadius),
@@ -1638,7 +1639,7 @@ function startSparkViewer() {
 
         this.dom.fitViewButton.addEventListener("click", () => this.fitView({ preserveDirection: true }));
         this.dom.addPrimitiveButton.addEventListener("click", async () => {
-          await this.loadPrimitive(this.dom.primitiveSelect.value || "sphere");
+          await this.loadPrimitive(this.dom.primitiveSelect.value || "cube");
         });
         this.dom.clearSceneButton.addEventListener("click", () => this.clearLoadedSplat());
         this.dom.gamePrimaryButton?.addEventListener("click", () => this.handleGameplayPrimaryAction());
@@ -5404,7 +5405,7 @@ function startSparkViewer() {
       }
 
       async createGameplaySplatAsset({
-        alpha = 0.92,
+        alpha = null,
         colorHex = null,
         kind = "sphere",
         position = new THREE.Vector3(),
@@ -5425,6 +5426,39 @@ function startSparkViewer() {
         root.add(mesh);
         root.updateMatrixWorld(true);
         return { mesh, root, spec };
+      }
+
+      collectGameplaySceneCollisionObstacles() {
+        return this.sceneItems
+          .filter((item) => item.visible && item.mesh && (item.baseCenterBounds || item.baseLocalBounds))
+          .map((item) => {
+            item.modelRoot.updateMatrixWorld(true);
+            item.rotationPivot.updateMatrixWorld(true);
+            item.mesh.updateMatrixWorld(true);
+            const sourceBounds = item.baseCenterBounds ?? item.baseLocalBounds;
+            const localCenter = sourceBounds.getCenter(new THREE.Vector3());
+            const localSize = sourceBounds.getSize(new THREE.Vector3());
+            const worldCenter = localCenter.clone().applyMatrix4(item.mesh.matrixWorld);
+            const worldPosition = new THREE.Vector3();
+            const worldQuaternion = new THREE.Quaternion();
+            const worldScale = new THREE.Vector3();
+            item.mesh.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
+            const axisX = new THREE.Vector3(1, 0, 0).applyQuaternion(worldQuaternion);
+            const rotation = Math.atan2(axisX.z, axisX.x);
+            const halfSizeX = Math.max((Math.abs(localSize.x * worldScale.x) * 0.5), 0.001);
+            const halfSizeZ = Math.max((Math.abs(localSize.z * worldScale.z) * 0.5), 0.001);
+            return {
+              kind: "scene-item",
+              halfSizeX,
+              halfSizeZ,
+              rotation,
+              shape: "box",
+              sourceId: item.id,
+              x: worldCenter.x,
+              z: worldCenter.z,
+            };
+          })
+          .filter(Boolean);
       }
 
       async setupGameplayScene() {
@@ -5459,7 +5493,7 @@ function startSparkViewer() {
         this.gameShadow.position.y = 0.02;
         this.gameSceneRoot.add(this.gameShadow);
 
-        const ballAsset = await this.createGameplaySplatAsset({ kind: "sphere", radius: this.gameState.ball.radius, colorHex: 0xf7d87b, alpha: 0.92 });
+        const ballAsset = await this.createGameplaySplatAsset({ kind: "sphere", radius: this.gameState.ball.radius });
         this.gameBall = ballAsset.mesh;
         this.gameBallSplatRoot = ballAsset.root;
         this.gameSceneRoot.add(this.gameBallSplatRoot);
@@ -5511,8 +5545,10 @@ function startSparkViewer() {
           return;
         }
         this.gameplayHasLoadedDemo = true;
-        this.dom.primitiveSelect.value = "sphere";
-        await this.loadPrimitive("sphere");
+        this.dom.primitiveSelect.value = "cube";
+        await this.loadPrimitive("cube");
+        this.gameStage.additionalCollisionObstacles = this.collectGameplaySceneCollisionObstacles();
+        this.gameState = { ...this.gameState, stage: this.gameStage };
         this.camera.position.set(0, 5.4, 5.8);
         this.camera.lookAt(0, 0.25, 0);
         this.orbitControls.target.set(0, 0.25, 0);
@@ -5625,8 +5661,9 @@ function startSparkViewer() {
       }
 
       resetGameplayRun(announce = false) {
-        this.gameState = resetGameState(this.gameState);
-        this.gameState = { ...this.gameState, touchMode: this.gameInputMode === "touch" };
+        this.gameStage.additionalCollisionObstacles = this.collectGameplaySceneCollisionObstacles();
+        this.gameState = resetGameState({ ...this.gameState, stage: this.gameStage });
+        this.gameState = { ...this.gameState, stage: this.gameStage, touchMode: this.gameInputMode === "touch" };
         this.touchState = endTouchDrag(this.touchState);
         this.updateGameplayVisuals();
         this.syncGameplayUi();
@@ -5637,6 +5674,8 @@ function startSparkViewer() {
       }
 
       updateGameplay(delta, now = performance.now()) {
+        this.gameStage.additionalCollisionObstacles = this.collectGameplaySceneCollisionObstacles();
+        this.gameState = { ...this.gameState, stage: this.gameStage };
         if (shouldFallbackToTouch({
           hasSensorSupport: this.motionState.hasSensorSupport,
           permission: this.motionState.permission,

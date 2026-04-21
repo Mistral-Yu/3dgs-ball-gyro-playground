@@ -14,11 +14,18 @@ test('viewer imports gameplay modules and advances gameplay each frame', () => {
   assert.match(viewerSource, /keepAnimating = keepAnimating \|\| movedByKeys \|\| animationActive \|\| animationShouldRender \|\| gameplayActive;/);
 });
 
-test('viewer renders the gameplay ball as a 3DGS primitive and mixes splat + mesh obstacles', () => {
+test('viewer renders the gameplay ball as a primitive-sphere-matched 3DGS asset, mixes splat + mesh obstacles, and mirrors scene items into gameplay box collision', () => {
   assert.match(viewerSource, /this\.gameStage\.splatObstacles/);
   assert.match(viewerSource, /this\.gameStage\.meshObstacles/);
-  assert.match(viewerSource, /await this\.createGameplaySplatAsset\(\{\s*kind: "sphere",\s*radius: this\.gameState\.ball\.radius/);
+  assert.match(viewerSource, /this\.gameStage\.additionalCollisionObstacles = this\.collectGameplaySceneCollisionObstacles\(\);/);
+  assert.match(viewerSource, /collectGameplaySceneCollisionObstacles\(\)/);
+  assert.match(viewerSource, /shape: "box"/);
+  assert.match(viewerSource, /halfSizeX,/);
+  assert.match(viewerSource, /halfSizeZ,/);
+  assert.match(viewerSource, /rotation,/);
+  assert.match(viewerSource, /await this\.createGameplaySplatAsset\(\{\s*kind: "sphere",\s*radius: this\.gameState\.ball\.radius\s*\}\)/);
   assert.match(viewerSource, /this\.gameBallSplatRoot/);
+  assert.doesNotMatch(viewerSource, /await this\.createGameplaySplatAsset\(\{\s*kind: "sphere",\s*radius: this\.gameState\.ball\.radius,\s*colorHex:/);
   assert.doesNotMatch(viewerSource, /new THREE\.SphereGeometry\(0\.22, 32, 24\)/);
 });
 
@@ -28,6 +35,13 @@ test('viewer registers game HUD controls and motion permission actions', () => {
   assert.match(viewerSource, /gameCalibrateButton: document\.getElementById\("game-calibrate-button"\)/);
   assert.match(viewerSource, /this\.dom\.gameEnableMotionButton\?\.addEventListener\("click", \(\) => this\.requestMotionPermission\(\)\)/);
   assert.match(viewerSource, /window\.addEventListener\("deviceorientation", this\.handleDeviceOrientation, true\);/);
+});
+
+test('index defaults the primitive picker to cube for the gameplay demo', () => {
+  assert.match(htmlSource, /<option value="cube" selected>Cube<\/option>/);
+  assert.doesNotMatch(htmlSource, /<option value="sphere" selected>Sphere<\/option>/);
+  assert.match(viewerSource, /this\.dom\.primitiveSelect\.value = "cube";/);
+  assert.match(viewerSource, /await this\.loadPrimitive\("cube"\);/);
 });
 
 test('index exposes the gameplay HUD overlay inside the viewer stage', () => {
