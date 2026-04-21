@@ -3,10 +3,13 @@ const length2 = (x, z) => Math.hypot(x, z);
 
 export const DEFAULT_GAME_CONFIG = {
   acceleration: 6.5,
+  accelerationResponsiveness: 7.5,
   damping: 0.92,
   restitution: 0.68,
   maxSpeed: 5.5,
   obstacleBounce: 0.72,
+  settleAcceleration: 0.05,
+  settleSpeed: 0.045,
 };
 
 export function createDefaultStage(overrides = {}) {
@@ -59,6 +62,7 @@ export function getStageCollisionObstacles(stage = createDefaultStage()) {
 }
 
 const createBall = (stage) => ({
+  acceleration: { x: 0, y: 0, z: 0 },
   position: { ...stage.spawn },
   velocity: { x: 0, y: 0, z: 0 },
   radius: 0.22,
@@ -70,16 +74,13 @@ export function createDefaultGameState(stage = createDefaultStage(), overrides =
     status: 'idle',
     goalReached: false,
     elapsedMs: 0,
-    touchMode: false,
     ball: createBall(stage),
     ...overrides,
   };
 }
 
 export function resetGameState(state) {
-  return createDefaultGameState(state?.stage || createDefaultStage(), {
-    touchMode: Boolean(state?.touchMode),
-  });
+  return createDefaultGameState(state?.stage || createDefaultStage());
 }
 
 const clampVelocity = (velocity, maxSpeed) => {
@@ -192,15 +193,21 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
 
   const deltaSeconds = Math.max(0, Number(dt) || 0);
   const acceleration = Number(config.acceleration) || DEFAULT_GAME_CONFIG.acceleration;
+  const accelerationResponsiveness = Math.max(0, Number(config.accelerationResponsiveness) || DEFAULT_GAME_CONFIG.accelerationResponsiveness);
   const damping = clamp(Number(config.damping) || DEFAULT_GAME_CONFIG.damping, 0, 1);
   const restitution = clamp(Number(config.restitution) || DEFAULT_GAME_CONFIG.restitution, 0, 1);
   const obstacleBounce = clamp(Number(config.obstacleBounce) || DEFAULT_GAME_CONFIG.obstacleBounce, 0, 1);
-  const nextStatus = safeState.status === 'idle' ? 'playing' : safeState.status;
+  const settleSpeed = Math.max(0, Number(config.settleSpeed) || DEFAULT_GAME_CONFIG.settleSpeed);
+  const settleAcceleration = Math.max(0, Number(config.settleAcceleration) || DEFAULT_GAME_CONFIG.settleAcceleration);
   const inputX = clamp(Number(inputVector?.x) || 0, -1, 1);
   const inputZ = clamp(Number(inputVector?.z) || 0, -1, 1);
 
   let ball = {
     ...safeState.ball,
+    acceleration: {
+      ...(safeState.ball.acceleration || { x: 0, y: 0, z: 0 }),
+      y: 0,
+    },
     velocity: {
       ...safeState.ball.velocity,
       y: 0,
@@ -212,10 +219,18 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
   const substepSeconds = deltaSeconds / substeps;
 
   for (let stepIndex = 0; stepIndex < substeps; stepIndex += 1) {
-    ball.velocity = {
-      x: ball.velocity.x + (inputX * acceleration * substepSeconds),
+    const accelerationBlend = clamp(accelerationResponsiveness * substepSeconds, 0, 1);
+    const targetAccelerationX = inputX * acceleration;
+    const targetAccelerationZ = inputZ * acceleration;
+    ball.acceleration = {
+      x: ball.acceleration.x + ((targetAccelerationX - ball.acceleration.x) * accelerationBlend),
       y: 0,
-      z: ball.velocity.z + (inputZ * acceleration * substepSeconds),
+      z: ball.acceleration.z + ((targetAccelerationZ - ball.acceleration.z) * accelerationBlend),
+    };
+    ball.velocity = {
+      x: ball.velocity.x + (ball.acceleration.x * substepSeconds),
+      y: 0,
+      z: ball.velocity.z + (ball.acceleration.z * substepSeconds),
     };
     ball.velocity = clampVelocity(ball.velocity, maxSpeed);
     ball.velocity = {
@@ -261,10 +276,32 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
 
   const goalDistance = length2(ball.position.x - stage.goal.x, ball.position.z - stage.goal.z);
   const goalReached = goalDistance <= (stage.goal.radius + ball.radius);
+  const speed = length2(ball.velocity.x, ball.velocity.z);
+  const accelerationMagnitude = length2(ball.acceleration.x, ball.acceleration.z);
+  const inputMagnitude = length2(inputX, inputZ);
+  const settled = !goalReached
+    && inputMagnitude < 0.001
+    && speed <= settleSpeed
+    && accelerationMagnitude <= settleAcceleration;
+
+  if (settled) {
+    ball = {
+      ...ball,
+      acceleration: { x: 0, y: 0, z: 0 },
+      velocity: { x: 0, y: 0, z: 0 },
+    };
+  }
+
+  const hasActiveMotion = inputMagnitude >= 0.001 || speed > settleSpeed || accelerationMagnitude > settleAcceleration;
+  const nextStatus = goalReached
+    ? 'won'
+    : settled
+      ? 'idle'
+      : (safeState.status === 'idle' && hasActiveMotion ? 'playing' : safeState.status);
 
   return {
     ...safeState,
-    status: goalReached ? 'won' : nextStatus,
+    status: nextStatus,
     goalReached,
     elapsedMs: safeState.elapsedMs + Math.round(deltaSeconds * 1000),
     ball,

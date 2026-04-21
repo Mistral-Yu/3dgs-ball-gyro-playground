@@ -8,8 +8,8 @@ const htmlSource = await readFile(new URL('../index.html', import.meta.url), 'ut
 test('viewer imports gameplay modules and advances gameplay each frame', () => {
   assert.match(viewerSource, /from "\.\/ball-game\.mjs"/);
   assert.match(viewerSource, /from "\.\/motion-controls\.mjs"/);
-  assert.match(viewerSource, /from "\.\/touch-controls\.mjs"/);
   assert.match(viewerSource, /from "\.\/game-ui-state\.mjs"/);
+  assert.doesNotMatch(viewerSource, /from "\.\/touch-controls\.mjs"/);
   assert.match(viewerSource, /const gameplayActive = this\.updateGameplay\(delta, frameStartedAt\);/);
   assert.match(viewerSource, /keepAnimating = keepAnimating \|\| movedByKeys \|\| animationActive \|\| animationShouldRender \|\| gameplayActive;/);
 });
@@ -35,7 +35,8 @@ test('viewer registers game HUD controls and motion permission actions', () => {
   assert.match(viewerSource, /gameCalibrateButton: document\.getElementById\("game-calibrate-button"\)/);
   assert.match(viewerSource, /this\.dom\.gameEnableMotionButton\?\.addEventListener\("click", \(\) => this\.requestMotionPermission\(\)\)/);
   assert.match(viewerSource, /window\.addEventListener\("deviceorientation", this\.handleDeviceOrientation, true\);/);
-  assert.match(viewerSource, /this\.setGameplayInputMode\("sensor"\);/);
+  assert.doesNotMatch(viewerSource, /gameTouchButton: document\.getElementById\("game-touch-button"\)/);
+  assert.doesNotMatch(viewerSource, /this\.setGameplayInputMode\("touch"\);/);
 });
 
 test('viewer repositions the default cube demo away from the gameplay ball and splat obstacles', () => {
@@ -43,6 +44,20 @@ test('viewer repositions the default cube demo away from the gameplay ball and s
   assert.match(viewerSource, /selectedItem\.transform\.translateY = 0\.58;/);
   assert.match(viewerSource, /selectedItem\.transform\.translateZ = -2\.05;/);
   assert.match(viewerSource, /selectedItem\.transform\.scale = 0\.82;/);
+});
+
+test('viewer batches viewport resize work and skips redundant stage resizes to reduce flicker', () => {
+  assert.match(viewerSource, /this\.viewportResizeFrame = 0;/);
+  assert.match(viewerSource, /this\.lastStageSize = \{ width: 0, height: 0 \};/);
+  assert.match(viewerSource, /window\.cancelAnimationFrame\(this\.viewportResizeFrame\);/);
+  assert.match(viewerSource, /this\.viewportResizeFrame = window\.requestAnimationFrame\(\(\) => \{/);
+  assert.match(viewerSource, /if \(this\.lastStageSize\.width === width && this\.lastStageSize\.height === height\) \{/);
+});
+
+test('viewer uses an opaque gameplay floor mesh to avoid translucent base flicker', () => {
+  assert.match(viewerSource, /const planeMaterial = new THREE\.MeshStandardMaterial\(\{/);
+  assert.match(viewerSource, /color: 0x10202b,/);
+  assert.doesNotMatch(viewerSource, /const planeMaterial = new THREE\.MeshBasicMaterial\(\{[\s\S]*?opacity: 0\.36,[\s\S]*?transparent: true,[\s\S]*?\}\);/);
 });
 
 test('index defaults the primitive picker to cube for the gameplay demo', () => {
@@ -56,7 +71,12 @@ test('index exposes the gameplay HUD overlay inside the viewer stage', () => {
   assert.match(htmlSource, /id="game-ui"/);
   assert.match(htmlSource, /id="game-primary-button"/);
   assert.match(htmlSource, /id="game-enable-motion-button"/);
-  assert.match(htmlSource, /id="game-touch-button"/);
   assert.match(htmlSource, /id="game-reset-button"/);
   assert.match(htmlSource, /id="game-status-text"/);
+  assert.doesNotMatch(htmlSource, /id="game-touch-button"/);
+});
+
+test('viewer keeps the prototype in play-only mode without exposing the tools toggle', () => {
+  assert.doesNotMatch(htmlSource, /id="view-mode-toggle-button"/);
+  assert.doesNotMatch(viewerSource, /viewModeToggleButton:\s*document\.getElementById\("view-mode-toggle-button"\)/);
 });

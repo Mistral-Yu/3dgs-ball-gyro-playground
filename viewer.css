@@ -215,6 +215,7 @@ body[data-view-mode="play"] .viewer-hud {
 
 body[data-view-mode="play"] .viewer-panel {
   padding: 0;
+  backdrop-filter: none;
 }
 
 body[data-view-mode="play"] .viewer-stage-shell {
@@ -465,6 +466,11 @@ body[data-view-mode="play"] .header-status {
 
 .game-ui.is-touch {
   border-color: rgba(97, 163, 255, 0.36);
+}
+
+body[data-view-mode="play"] .game-ui {
+  background: rgba(6, 12, 19, 0.96);
+  backdrop-filter: none;
 }
 
 .script-editor {

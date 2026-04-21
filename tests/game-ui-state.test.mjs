@@ -23,27 +23,26 @@ test('HUD model requests motion permission when sensor support exists but permis
   assert.equal(hud.showTouchHint, false);
 });
 
-test('HUD model recommends touch mode when the sensor is unavailable', () => {
+test('HUD model reports motion unavailability without offering touch mode', () => {
   const hud = createGameplayHudModel({
     motion: {
       permission: 'denied',
-      mode: 'touch',
+      mode: 'sensor',
       hasSensorSupport: false,
     },
     game: {
       status: 'idle',
       goalReached: false,
       elapsedMs: 0,
-      touchMode: true,
     },
   });
 
-  assert.equal(hud.primaryAction.id, 'touch-mode');
-  assert.equal(hud.showTouchHint, true);
-  assert.match(hud.statusText, /Touch/i);
+  assert.equal(hud.primaryAction.id, 'sensor-unavailable');
+  assert.equal(hud.showTouchHint, false);
+  assert.match(hud.statusText, /unavailable/i);
 });
 
-test('HUD model switches back to sensor guidance once motion is granted even after touch fallback', () => {
+test('HUD model keeps start guidance once motion is granted', () => {
   const hud = createGameplayHudModel({
     motion: {
       permission: 'granted',
@@ -54,14 +53,13 @@ test('HUD model switches back to sensor guidance once motion is granted even aft
       status: 'idle',
       goalReached: false,
       elapsedMs: 0,
-      touchMode: true,
     },
   });
 
   assert.equal(hud.primaryAction.id, 'start');
   assert.equal(hud.showTouchHint, false);
   assert.equal(hud.showCalibrate, true);
-  assert.doesNotMatch(hud.statusText, /Touch/i);
+  assert.match(hud.statusText, /Ready/i);
 });
 
 test('HUD model surfaces a win state with retry affordance and formatted timer', () => {

@@ -25,17 +25,41 @@ test('default game state starts idle at the stage spawn point', () => {
   assert.equal(state.status, 'idle');
   assert.deepEqual(state.ball.position, stage.spawn);
   assert.deepEqual(state.ball.velocity, { x: 0, y: 0, z: 0 });
+  assert.deepEqual(state.ball.acceleration, { x: 0, y: 0, z: 0 });
   assert.equal(state.elapsedMs, 0);
 });
 
-test('stepGameState accelerates the ball according to the active input vector', () => {
+test('stepGameState integrates persistent acceleration from the active input vector', () => {
   const stage = createDefaultStage();
   const state = createDefaultGameState(stage);
   const next = advance(state, { x: 0.8, z: 0.3 }, 30);
 
   assert.ok(next.ball.position.x > stage.spawn.x, `expected x movement, got ${next.ball.position.x}`);
   assert.ok(next.ball.position.z > stage.spawn.z, `expected z movement, got ${next.ball.position.z}`);
+  assert.ok(next.ball.acceleration.x > 0, `expected positive x acceleration, got ${next.ball.acceleration.x}`);
+  assert.ok(next.ball.acceleration.z > 0, `expected positive z acceleration, got ${next.ball.acceleration.z}`);
   assert.ok(next.elapsedMs > 400);
+});
+
+test('stepGameState returns to idle once the ball has fully settled so the next run can start without reset', () => {
+  const stage = createDefaultStage();
+  const state = {
+    ...createDefaultGameState(stage),
+    status: 'playing',
+    ball: {
+      ...createDefaultGameState(stage).ball,
+      acceleration: { x: 0.02, y: 0, z: -0.01 },
+      velocity: { x: 0.01, y: 0, z: -0.01 },
+    },
+  };
+
+  const next = stepGameState(state, { x: 0, z: 0 }, 1 / 60, DEFAULT_GAME_CONFIG);
+
+  assert.equal(next.status, 'idle');
+  assert.equal(next.ball.velocity.x, 0);
+  assert.equal(next.ball.velocity.z, 0);
+  assert.equal(next.ball.acceleration.x, 0);
+  assert.equal(next.ball.acceleration.z, 0);
 });
 
 test('stepGameState clamps the ball inside the stage walls and bounces velocity', () => {

@@ -4,7 +4,6 @@ export function createGameplayHudModel({ motion = {}, game = {} } = {}) {
   const permission = motion.permission || 'unknown';
   const hasSensorSupport = motion.hasSensorSupport !== false;
   const sensorReady = hasSensorSupport && permission === 'granted' && motion.mode === 'sensor';
-  const usingTouch = !sensorReady && (game.touchMode || motion.mode === 'touch' || !hasSensorSupport || permission === 'denied');
   const gameStatus = game.status || 'idle';
 
   let primaryAction = { id: 'start', label: 'Start Run' };
@@ -13,9 +12,9 @@ export function createGameplayHudModel({ motion = {}, game = {} } = {}) {
   if (gameStatus === 'won' || game.goalReached) {
     primaryAction = { id: 'retry', label: 'Retry' };
     statusText = 'Goal reached. Nice run.';
-  } else if (usingTouch) {
-    primaryAction = { id: 'touch-mode', label: 'Touch Mode' };
-    statusText = 'Touch controls active.';
+  } else if (!hasSensorSupport || permission === 'denied') {
+    primaryAction = { id: 'sensor-unavailable', label: 'Motion Unavailable' };
+    statusText = 'Motion sensor unavailable on this device.';
   } else if (hasSensorSupport && permission !== 'granted') {
     primaryAction = { id: 'enable-motion', label: 'Enable Motion' };
     statusText = 'Motion permission is required.';
@@ -25,7 +24,7 @@ export function createGameplayHudModel({ motion = {}, game = {} } = {}) {
     primaryAction,
     secondaryAction: { id: 'reset', label: 'Reset' },
     showCalibrate: permission === 'granted',
-    showTouchHint: usingTouch,
+    showTouchHint: false,
     statusText,
     timerText: formatTimer(game.elapsedMs),
   };

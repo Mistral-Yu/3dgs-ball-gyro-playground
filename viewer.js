@@ -33,8 +33,7 @@ import {
 } from "./viewer-animation.mjs";
 import { DEFAULT_LIGHT_COLOR, DEFAULT_LIGHT_HELPER_SCALE, clampLightColor, createDefaultLightState } from "./viewer-lighting.mjs";
 import { DEFAULT_GAME_CONFIG, createDefaultGameState, createDefaultStage, resetGameState, stepGameState } from "./ball-game.mjs";
-import { DEFAULT_MOTION_CONFIG, buildGravityVector, calibrateMotionState, createMotionState, shouldFallbackToTouch, updateMotionState } from "./motion-controls.mjs";
-import { DEFAULT_TOUCH_CONFIG, createTouchState, endTouchDrag, startTouchDrag, updateTouchDrag } from "./touch-controls.mjs";
+import { DEFAULT_MOTION_CONFIG, buildGravityVector, calibrateMotionState, createMotionState, updateMotionState } from "./motion-controls.mjs";
 import { createGameplayHudModel } from "./game-ui-state.mjs";
 
 function startSparkViewer() {
@@ -262,7 +261,6 @@ function startSparkViewer() {
       gamePrimaryButton: document.getElementById("game-primary-button"),
       gameEnableMotionButton: document.getElementById("game-enable-motion-button"),
       gameCalibrateButton: document.getElementById("game-calibrate-button"),
-      gameTouchButton: document.getElementById("game-touch-button"),
       gameResetButton: document.getElementById("game-reset-button"),
       statusLine: document.getElementById("status-line"),
       toggleAutorotateButton: document.getElementById("toggle-autorotate-button"),
@@ -270,7 +268,6 @@ function startSparkViewer() {
       toggleBoundsButton: document.getElementById("toggle-bounds-button"),
       toggleGizmoButton: document.getElementById("toggle-gizmo-button"),
       toggleGridButton: document.getElementById("toggle-grid-button"),
-      viewModeToggleButton: document.getElementById("view-mode-toggle-button"),
     };
 
     const {
@@ -1314,9 +1311,17 @@ function startSparkViewer() {
         this.pendingPreviewSparkUpdate = false;
         this.postLoadRefreshHandle = 0;
         this.stageResizeObserver = null;
+        this.viewportResizeFrame = 0;
+        this.lastStageSize = { width: 0, height: 0 };
         this.handleViewportResize = () => {
-          this.syncUiScale();
-          this.onResize();
+          if (this.viewportResizeFrame) {
+            window.cancelAnimationFrame(this.viewportResizeFrame);
+          }
+          this.viewportResizeFrame = window.requestAnimationFrame(() => {
+            this.viewportResizeFrame = 0;
+            this.syncUiScale();
+            this.onResize();
+          });
         };
         this.idleRenderDelayMs = 160;
         this.depthRangeLimits = { min: 0.1, max: 100 };
@@ -1326,11 +1331,9 @@ function startSparkViewer() {
         this.gameState = createDefaultGameState(this.gameStage);
         this.motionState = createMotionState({
           hasSensorSupport: typeof window.DeviceOrientationEvent !== "undefined",
-          mode: typeof window.DeviceOrientationEvent !== "undefined" ? "sensor" : "touch",
+          mode: "sensor",
         });
-        this.touchState = createTouchState();
-        this.gameInputMode = this.motionState.hasSensorSupport ? "sensor" : "touch";
-        this.gameplayPointerId = null;
+        this.gameInputMode = "sensor";
         this.gameplaySensorListenersInstalled = false;
         this.gameplayHasLoadedDemo = false;
         this.gameplayQualityLevel = "Medium";
@@ -1505,7 +1508,6 @@ function startSparkViewer() {
         this.renderer.domElement.addEventListener("pointerleave", () => this.clearHoverReadout());
         this.renderer.domElement.addEventListener("wheel", (event) => this.handleStageWheel(event), { passive: false });
         this.installRenderActivityListeners();
-        this.installGameplayPointerHandlers();
         this.invalidateRender();
 
         if (this.isFileProtocol) {
@@ -1645,9 +1647,7 @@ function startSparkViewer() {
         this.dom.gamePrimaryButton?.addEventListener("click", () => this.handleGameplayPrimaryAction());
         this.dom.gameEnableMotionButton?.addEventListener("click", () => this.requestMotionPermission());
         this.dom.gameCalibrateButton?.addEventListener("click", () => this.calibrateGameplayMotion());
-        this.dom.gameTouchButton?.addEventListener("click", () => this.setGameplayInputMode("touch"));
         this.dom.gameResetButton?.addEventListener("click", () => this.resetGameplayRun(true));
-        this.dom.viewModeToggleButton?.addEventListener("click", () => this.setViewMode(this.state.viewMode === "play" ? "tools" : "play"));
         this.dom.saveSceneSplatsButton?.addEventListener("click", async () => {
           try {
             await this.saveVisibleSceneSplats();
@@ -5268,11 +5268,15 @@ function startSparkViewer() {
       }
 
       onResize() {
-        const width = this.dom.stage.clientWidth;
-        const height = this.dom.stage.clientHeight;
+        const width = Math.round(this.dom.stage.clientWidth);
+        const height = Math.round(this.dom.stage.clientHeight);
         if (!width || !height) {
           return;
         }
+        if (this.lastStageSize.width === width && this.lastStageSize.height === height) {
+          return;
+        }
+        this.lastStageSize = { width, height };
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height, false);
@@ -5463,10 +5467,10 @@ function startSparkViewer() {
 
       async setupGameplayScene() {
         const planeGeometry = new THREE.CircleGeometry(4.4, 64);
-        const planeMaterial = new THREE.MeshBasicMaterial({
+        const planeMaterial = new THREE.MeshStandardMaterial({
           color: 0x10202b,
-          opacity: 0.36,
-          transparent: true,
+          metalness: 0.08,
+          roughness: 0.9,
         });
         this.gameFloor = new THREE.Mesh(planeGeometry, planeMaterial);
         this.gameFloor.rotation.x = -Math.PI / 2;
@@ -5559,36 +5563,6 @@ function startSparkViewer() {
         this.forceVisualRefresh(3);
       }
 
-      installGameplayPointerHandlers() {
-        this.renderer.domElement.addEventListener("pointerdown", (event) => {
-          if (this.gameInputMode !== "touch" || event.button !== 0) {
-            return;
-          }
-          this.gameplayPointerId = event.pointerId;
-          this.touchState = startTouchDrag(this.touchState, { x: event.clientX, y: event.clientY });
-          this.gameState = { ...this.gameState, touchMode: true, status: this.gameState.status === "idle" ? "playing" : this.gameState.status };
-          this.syncGameplayUi();
-          this.invalidateRender();
-        }, true);
-        window.addEventListener("pointermove", (event) => {
-          if (this.gameInputMode !== "touch" || this.gameplayPointerId == null || event.pointerId !== this.gameplayPointerId) {
-            return;
-          }
-          this.touchState = updateTouchDrag(this.touchState, { x: event.clientX, y: event.clientY }, DEFAULT_TOUCH_CONFIG);
-          this.invalidateRender();
-        }, { passive: true });
-        const finishTouch = (event) => {
-          if (this.gameplayPointerId == null || (event?.pointerId != null && event.pointerId !== this.gameplayPointerId)) {
-            return;
-          }
-          this.gameplayPointerId = null;
-          this.touchState = endTouchDrag(this.touchState);
-          this.invalidateRender();
-        };
-        window.addEventListener("pointerup", finishTouch, { passive: true });
-        window.addEventListener("pointercancel", finishTouch, { passive: true });
-      }
-
       installMotionSensors() {
         if (this.gameplaySensorListenersInstalled || typeof window.DeviceOrientationEvent === "undefined") {
           return;
@@ -5599,22 +5573,29 @@ function startSparkViewer() {
 
       async requestMotionPermission() {
         if (typeof window.DeviceOrientationEvent === "undefined") {
-          this.motionState = { ...this.motionState, hasSensorSupport: false, permission: "denied", mode: "touch" };
-          this.setGameplayInputMode("touch");
+          this.motionState = { ...this.motionState, hasSensorSupport: false, permission: "denied", mode: "sensor" };
+          this.syncGameplayUi();
+          this.updateStatus("Motion sensor unavailable");
+          this.invalidateRender();
           return false;
         }
         this.installMotionSensors();
         if (typeof window.DeviceOrientationEvent.requestPermission === "function") {
           const permission = await window.DeviceOrientationEvent.requestPermission();
           this.motionState = { ...this.motionState, permission: permission === "granted" ? "granted" : "denied" };
-          if (permission != "granted") {
-            this.setGameplayInputMode("touch");
+          if (permission !== "granted") {
+            this.syncGameplayUi();
+            this.updateStatus("Motion permission denied");
+            this.invalidateRender();
             return false;
           }
         } else {
           this.motionState = { ...this.motionState, permission: "granted" };
         }
-        this.setGameplayInputMode("sensor");
+        this.gameInputMode = "sensor";
+        this.motionState = { ...this.motionState, mode: "sensor" };
+        this.syncGameplayUi();
+        this.invalidateRender();
         return true;
       }
 
@@ -5643,30 +5624,18 @@ function startSparkViewer() {
         this.updateStatus("Gameplay motion calibrated");
       }
 
-      setGameplayInputMode(mode) {
-        const nextMode = mode === "sensor" ? "sensor" : "touch";
-        this.gameInputMode = nextMode;
-        this.motionState = { ...this.motionState, mode: nextMode };
-        this.gameState = { ...this.gameState, touchMode: nextMode == "touch" };
-        if (nextMode === "touch") {
-          this.touchState = endTouchDrag(this.touchState);
-        }
-        this.syncGameplayUi();
-        this.invalidateRender();
-      }
-
       handleGameplayPrimaryAction() {
         const hud = createGameplayHudModel({ motion: this.motionState, game: this.gameState });
         if (hud.primaryAction.id === "enable-motion") {
           void this.requestMotionPermission();
           return;
         }
-        if (hud.primaryAction.id === "touch-mode") {
-          this.setGameplayInputMode("touch");
-          return;
-        }
         if (hud.primaryAction.id === "retry") {
           this.resetGameplayRun(true);
+          return;
+        }
+        if (hud.primaryAction.id === "sensor-unavailable") {
+          this.updateStatus("Motion sensor unavailable");
           return;
         }
         this.gameState = { ...this.gameState, status: "playing" };
@@ -5677,8 +5646,7 @@ function startSparkViewer() {
       resetGameplayRun(announce = false) {
         this.gameStage.additionalCollisionObstacles = this.collectGameplaySceneCollisionObstacles();
         this.gameState = resetGameState({ ...this.gameState, stage: this.gameStage });
-        this.gameState = { ...this.gameState, stage: this.gameStage, touchMode: this.gameInputMode === "touch" };
-        this.touchState = endTouchDrag(this.touchState);
+        this.gameState = { ...this.gameState, stage: this.gameStage };
         this.updateGameplayVisuals();
         this.syncGameplayUi();
         if (announce) {
@@ -5690,16 +5658,6 @@ function startSparkViewer() {
       updateGameplay(delta, now = performance.now()) {
         this.gameStage.additionalCollisionObstacles = this.collectGameplaySceneCollisionObstacles();
         this.gameState = { ...this.gameState, stage: this.gameStage };
-        if (shouldFallbackToTouch({
-          hasSensorSupport: this.motionState.hasSensorSupport,
-          permission: this.motionState.permission,
-          hasSignal: this.motionState.hasSignal,
-          lastEventTs: this.motionState.lastEventTs,
-          now,
-          timeoutMs: DEFAULT_MOTION_CONFIG.timeoutMs,
-        })) {
-          this.setGameplayInputMode("touch");
-        }
         let inputVector = { x: 0, z: 0 };
         if (this.gameInputMode === "sensor" && this.motionState.permission === "granted") {
           const gravity = buildGravityVector(this.motionState, DEFAULT_MOTION_CONFIG);
@@ -5707,8 +5665,6 @@ function startSparkViewer() {
             x: THREE.MathUtils.clamp(gravity.x / DEFAULT_MOTION_CONFIG.sensitivity, -1, 1),
             z: THREE.MathUtils.clamp(gravity.z / DEFAULT_MOTION_CONFIG.sensitivity, -1, 1),
           };
-        } else if (this.gameInputMode === "touch") {
-          inputVector = { ...this.touchState.vector };
         }
         const shouldStep = this.gameState.status === "playing"
           || Math.abs(inputVector.x) > 0.001
@@ -5718,7 +5674,6 @@ function startSparkViewer() {
           return false;
         }
         this.gameState = stepGameState(this.gameState, inputVector, delta, DEFAULT_GAME_CONFIG);
-        this.gameState = { ...this.gameState, touchMode: this.gameInputMode === "touch" };
         this.updateGameplayVisuals();
         this.syncGameplayUi();
         if (this.gameState.goalReached) {
@@ -5746,14 +5701,13 @@ function startSparkViewer() {
           this.dom.gamePrimaryButton.dataset.action = hud.primaryAction.id;
         }
         if (this.dom.gameStatusText) {
-          const controlText = this.gameInputMode === "sensor" ? "Sensor" : "Touch";
-          this.dom.gameStatusText.textContent = `${hud.statusText} ${controlText} control.`;
+          this.dom.gameStatusText.textContent = `${hud.statusText} Sensor control.`;
         }
         if (this.dom.gameTimerChip) {
           this.dom.gameTimerChip.textContent = `Timer ${hud.timerText}`;
         }
         if (this.dom.gameModeChip) {
-          this.dom.gameModeChip.textContent = this.gameInputMode === "sensor" ? "Mode Sensor" : "Mode Touch";
+          this.dom.gameModeChip.textContent = "Mode Sensor";
         }
         if (this.dom.gameGoalChip) {
           this.dom.gameGoalChip.textContent = this.gameState.goalReached ? "Goal Cleared" : "Goal Ahead";
@@ -5763,7 +5717,6 @@ function startSparkViewer() {
           this.gameplayQualityLevel = mobileWidth ? "Medium" : "High";
           this.dom.gameQualityChip.textContent = `Quality ${this.gameplayQualityLevel}`;
         }
-        this.dom.gameUi?.classList.toggle("is-touch", this.gameInputMode === "touch");
         this.dom.gameEnableMotionButton?.toggleAttribute(
           "hidden",
           this.motionState.permission === "granted"
@@ -6157,14 +6110,6 @@ function startSparkViewer() {
       syncViewModeUi() {
         const isPlayMode = this.state.viewMode === "play";
         document.body.dataset.viewMode = isPlayMode ? "play" : "tools";
-        if (this.dom.viewModeToggleButton) {
-          this.dom.viewModeToggleButton.textContent = isPlayMode ? "Tools" : "Play Mode";
-          this.dom.viewModeToggleButton.setAttribute("aria-pressed", String(!isPlayMode));
-          this.dom.viewModeToggleButton.classList.toggle("toolbar-button-primary", isPlayMode);
-          this.dom.viewModeToggleButton.title = isPlayMode
-            ? "Open the full viewer tools and diagnostics."
-            : "Return to the minimal play layout.";
-        }
       }
 
       setAnimationOriginMode(mode) {
