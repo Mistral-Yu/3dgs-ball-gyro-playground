@@ -14,7 +14,7 @@
   <script src="./primitives/primitive-library.js"></script>
   <script src="./viewer.bundle.js" defer></script>
 </head>
-<body>
+<body data-view-mode="play">
   <div class="app-shell">
     <header class="app-header">
       <div class="brand-block">
@@ -22,6 +22,9 @@
         <h1>3DGS Viewer</h1>
       </div>
       <p class="header-status" id="status-line">Starting viewer...</p>
+      <div class="header-tools">
+        <button class="toolbar-button" type="button" id="view-mode-toggle-button" title="Toggle between minimal play mode and the full viewer tools.">Tools</button>
+      </div>
     </header>
 
     <main class="workspace">
@@ -187,23 +190,6 @@
             </div>
           </section>
         </div>
-        <section class="timeline-panel" aria-label="Animation timeline">
-          <div class="timeline-toolbar">
-            <div class="button-pair button-pair-timeline">
-              <button class="toolbar-button toolbar-button-primary" type="button" id="animation-play-button" title="Play the current animation script.">Play</button>
-              <button class="toolbar-button" type="button" id="animation-pause-button" title="Pause animation playback.">Pause</button>
-              <button class="toolbar-button" type="button" id="animation-reset-button" title="Return animation time to the start.">Reset</button>
-              <label class="timeline-loop-toggle" title="Loop playback when the timeline reaches the end.">
-                <input id="animation-loop-checkbox" type="checkbox" checked>
-                <span>Loop</span>
-              </label>
-            </div>
-          </div>
-          <div class="timeline-scrubber-row">
-            <span class="timeline-time" id="animation-time-label">0.00s / 6.00s</span>
-            <input id="animation-time-range" type="range" min="0" max="6" step="0.01" value="0">
-          </div>
-        </section>
         </div>
       </section>
 

@@ -5,6 +5,7 @@ import {
   DEFAULT_GAME_CONFIG,
   createDefaultGameState,
   createDefaultStage,
+  getStageCollisionObstacles,
   resetGameState,
   stepGameState,
 } from '../ball-game.mjs';
@@ -72,6 +73,44 @@ test('stepGameState resolves circular obstacle collisions without tunneling thro
   const distanceToObstacle = Math.hypot(next.ball.position.x - stage.obstacles[0].x, next.ball.position.z - stage.obstacles[0].z);
 
   assert.ok(distanceToObstacle >= stage.obstacles[0].radius + next.ball.radius - 1e-6, `ball overlapped obstacle: ${distanceToObstacle}`);
+});
+
+test('default stage exposes both splat and mesh gameplay obstacles', () => {
+  const stage = createDefaultStage();
+
+  assert.ok(Array.isArray(stage.splatObstacles));
+  assert.ok(Array.isArray(stage.meshObstacles));
+  assert.ok(stage.splatObstacles.length > 0);
+  assert.ok(stage.meshObstacles.length > 0);
+  assert.equal(
+    getStageCollisionObstacles(stage).length,
+    stage.splatObstacles.length + stage.meshObstacles.length,
+  );
+});
+
+test('stepGameState resolves collisions against both splat and mesh obstacles', () => {
+  const stage = createDefaultStage({
+    splatObstacles: [{ x: 0, z: 0, radius: 0.45 }],
+    meshObstacles: [{ x: 1.4, z: 0, radius: 0.4 }],
+    goal: { x: 2.6, z: 2.6, radius: 0.35 },
+  });
+  const initial = createDefaultGameState(stage);
+  const state = {
+    ...initial,
+    status: 'playing',
+    ball: {
+      ...initial.ball,
+      position: { x: -0.6, y: 0.35, z: 0 },
+      velocity: { x: 4.8, y: 0, z: 0 },
+    },
+  };
+  const next = stepGameState(state, { x: 0, z: 0 }, 1 / 4, DEFAULT_GAME_CONFIG);
+  const collisionObstacles = getStageCollisionObstacles(stage);
+
+  for (const obstacle of collisionObstacles) {
+    const distance = Math.hypot(next.ball.position.x - obstacle.x, next.ball.position.z - obstacle.z);
+    assert.ok(distance >= obstacle.radius + next.ball.radius - 1e-6, `ball overlapped obstacle at ${obstacle.x},${obstacle.z}: ${distance}`);
+  }
 });
 
 test('stepGameState marks the run complete when the ball reaches the goal', () => {

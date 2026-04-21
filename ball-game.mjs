@@ -10,7 +10,7 @@ export const DEFAULT_GAME_CONFIG = {
 };
 
 export function createDefaultStage(overrides = {}) {
-  return {
+  const stage = {
     spawn: { x: -2.4, y: 0.35, z: -2.1 },
     bounds: {
       minX: -3.2,
@@ -19,13 +19,34 @@ export function createDefaultStage(overrides = {}) {
       maxZ: 3.2,
     },
     goal: { x: 2.35, z: 2.45, radius: 0.42 },
-    obstacles: [
-      { x: -0.6, z: -0.2, radius: 0.45 },
-      { x: 0.9, z: 1.15, radius: 0.38 },
-      { x: 1.35, z: -1.15, radius: 0.4 },
+    splatObstacles: [
+      { x: -0.6, z: -0.2, radius: 0.45, kind: 'splat' },
+      { x: 1.35, z: -1.15, radius: 0.4, kind: 'splat' },
+    ],
+    meshObstacles: [
+      { x: 0.9, z: 1.15, radius: 0.38, kind: 'mesh' },
     ],
     ...overrides,
   };
+  const splatObstacles = Array.isArray(stage.splatObstacles) ? stage.splatObstacles.map((obstacle) => ({ ...obstacle, kind: 'splat' })) : [];
+  const meshObstacles = Array.isArray(stage.meshObstacles) ? stage.meshObstacles.map((obstacle) => ({ ...obstacle, kind: 'mesh' })) : [];
+  const legacyObstacles = Array.isArray(stage.obstacles) ? stage.obstacles : [];
+  return {
+    ...stage,
+    splatObstacles,
+    meshObstacles,
+    obstacles: legacyObstacles.length > 0 ? legacyObstacles : [...splatObstacles, ...meshObstacles],
+  };
+}
+
+export function getStageCollisionObstacles(stage = createDefaultStage()) {
+  if (Array.isArray(stage.obstacles) && stage.obstacles.length > 0) {
+    return stage.obstacles;
+  }
+  return [
+    ...(Array.isArray(stage.splatObstacles) ? stage.splatObstacles : []),
+    ...(Array.isArray(stage.meshObstacles) ? stage.meshObstacles : []),
+  ];
 }
 
 const createBall = (stage) => ({
@@ -152,8 +173,11 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
     ball.velocity.z = -Math.abs(ball.velocity.z) * restitution;
   }
 
-  for (const obstacle of stage.obstacles) {
-    ball = resolveObstacleCollision(ball, obstacle, obstacleBounce);
+  const collisionObstacles = getStageCollisionObstacles(stage);
+  for (let pass = 0; pass < Math.max(collisionObstacles.length, 1); pass += 1) {
+    for (const obstacle of collisionObstacles) {
+      ball = resolveObstacleCollision(ball, obstacle, obstacleBounce);
+    }
   }
 
   const goalDistance = length2(ball.position.x - stage.goal.x, ball.position.z - stage.goal.z);

@@ -270,6 +270,7 @@ function startSparkViewer() {
       toggleBoundsButton: document.getElementById("toggle-bounds-button"),
       toggleGizmoButton: document.getElementById("toggle-gizmo-button"),
       toggleGridButton: document.getElementById("toggle-grid-button"),
+      viewModeToggleButton: document.getElementById("view-mode-toggle-button"),
     };
 
     const {
@@ -852,7 +853,48 @@ function startSparkViewer() {
         bytes: definition.splats.length * 17 * 4,
         buffer: packGaussianPly(definition.splats),
         hoverEntries,
+        splatDefinitions: definition.splats,
         splats: definition.splats.length,
+      };
+    };
+
+    const createGameplayPrimitiveSpec = async ({
+      alpha = 0.92,
+      colorHex = null,
+      kind = "sphere",
+      radius = 1,
+    } = {}) => {
+      const definition = await createPrimitiveSpec(kind);
+      const scaledRadius = Math.max(Number(radius) || 1, 0.01);
+      const overrideColor = colorHex == null ? null : new THREE.Color(colorHex);
+      const scaleVector = new THREE.Vector3(scaledRadius, scaledRadius, scaledRadius);
+      const splats = definition.splatDefinitions.map((splat) => ({
+        ...splat,
+        alpha,
+        color: overrideColor ? overrideColor.clone() : splat.color.clone(),
+        position: splat.position.clone().multiply(scaleVector),
+        scale: splat.scale.clone().multiplyScalar(scaledRadius),
+      }));
+      const localBounds = definition.localBounds.clone();
+      localBounds.min.multiply(scaleVector);
+      localBounds.max.multiply(scaleVector);
+      return {
+        ...definition,
+        localBounds,
+        name: `Gameplay ${definition.name}`,
+        scaleRange: formatScaleRange(
+          Math.max(scaledRadius * 0.045, 0.001),
+          Math.max(scaledRadius * 0.12, 0.001),
+        ),
+        splats,
+        bytes: splats.length * 17 * 4,
+        buffer: packGaussianPly(splats),
+        hoverEntries: definition.hoverEntries?.map((entry) => ({
+          ...entry,
+          color: overrideColor ? [overrideColor.r, overrideColor.g, overrideColor.b] : entry.color.slice(),
+          position: entry.position.clone().multiply(scaleVector),
+          scale: entry.scale.clone().multiplyScalar(scaledRadius),
+        })) ?? null,
       };
     };
 
@@ -1378,6 +1420,7 @@ function startSparkViewer() {
           showGizmo: false,
           showGrid: true,
           transformGizmoMode: "translate",
+          viewMode: "play",
         };
       }
 
@@ -1385,6 +1428,7 @@ function startSparkViewer() {
         this.dom.stage.append(this.renderer.domElement);
         this.syncUiScale();
         this.bindUi();
+        this.syncViewModeUi();
         if (this.dom.sceneRenderSection && this.dom.sceneTransformSection) {
           this.dom.sceneRenderSection.parentElement?.insertBefore(
             this.dom.sceneTransformSection,
@@ -1422,7 +1466,7 @@ function startSparkViewer() {
         this.syncColorPickButton();
         this.updateTransformGizmoButtons();
         this.updateMetaUi();
-        this.setupGameplayScene();
+        await this.setupGameplayScene();
         this.syncGameplayUi();
         this.onResize();
         this.startAnimationLoop();
@@ -1602,6 +1646,7 @@ function startSparkViewer() {
         this.dom.gameCalibrateButton?.addEventListener("click", () => this.calibrateGameplayMotion());
         this.dom.gameTouchButton?.addEventListener("click", () => this.setGameplayInputMode("touch"));
         this.dom.gameResetButton?.addEventListener("click", () => this.resetGameplayRun(true));
+        this.dom.viewModeToggleButton?.addEventListener("click", () => this.setViewMode(this.state.viewMode === "play" ? "tools" : "play"));
         this.dom.saveSceneSplatsButton?.addEventListener("click", async () => {
           try {
             await this.saveVisibleSceneSplats();
@@ -5358,7 +5403,31 @@ function startSparkViewer() {
         }
       }
 
-      setupGameplayScene() {
+      async createGameplaySplatAsset({
+        alpha = 0.92,
+        colorHex = null,
+        kind = "sphere",
+        position = new THREE.Vector3(),
+        radius = 1,
+      } = {}) {
+        const spec = await createGameplayPrimitiveSpec({ alpha, colorHex, kind, radius });
+        const mesh = new SplatMesh({
+          ...buildSplatMeshLoadOptions(false),
+          fileBytes: spec.buffer,
+          fileType: SplatFileType.PLY,
+        });
+        mesh.name = spec.name;
+        mesh.maxShDegree = spec.shDegree;
+        await mesh.initialized;
+        const root = new THREE.Group();
+        root.name = `${spec.name}-root`;
+        root.position.copy(position);
+        root.add(mesh);
+        root.updateMatrixWorld(true);
+        return { mesh, root, spec };
+      }
+
+      async setupGameplayScene() {
         const planeGeometry = new THREE.CircleGeometry(4.4, 64);
         const planeMaterial = new THREE.MeshBasicMaterial({
           color: 0x10202b,
@@ -5390,11 +5459,10 @@ function startSparkViewer() {
         this.gameShadow.position.y = 0.02;
         this.gameSceneRoot.add(this.gameShadow);
 
-        this.gameBall = new THREE.Mesh(
-          new THREE.SphereGeometry(0.22, 32, 24),
-          new THREE.MeshStandardMaterial({ color: 0xf7d87b, emissive: 0x3a2a08, roughness: 0.3, metalness: 0.12 }),
-        );
-        this.gameSceneRoot.add(this.gameBall);
+        const ballAsset = await this.createGameplaySplatAsset({ kind: "sphere", radius: this.gameState.ball.radius, colorHex: 0xf7d87b, alpha: 0.92 });
+        this.gameBall = ballAsset.mesh;
+        this.gameBallSplatRoot = ballAsset.root;
+        this.gameSceneRoot.add(this.gameBallSplatRoot);
 
         this.gameGoal = new THREE.Mesh(
           new THREE.TorusGeometry(0.42, 0.04, 16, 48),
@@ -5404,12 +5472,26 @@ function startSparkViewer() {
         this.gameGoal.position.y = 0.04;
         this.gameSceneRoot.add(this.gameGoal);
 
-        this.gameObstacleMeshes = this.gameStage.obstacles.map((obstacle) => {
+        this.gameSplatObstacleAssets = await Promise.all(
+          this.gameStage.splatObstacles.map(async (obstacle) => {
+            const asset = await this.createGameplaySplatAsset({
+              kind: "sphere",
+              radius: obstacle.radius,
+              colorHex: 0x4da6ff,
+              alpha: 0.88,
+              position: new THREE.Vector3(obstacle.x, obstacle.radius, obstacle.z),
+            });
+            this.gameSceneRoot.add(asset.root);
+            return asset;
+          }),
+        );
+        this.gameMeshObstacleMeshes = this.gameStage.meshObstacles.map((obstacle) => {
           const mesh = new THREE.Mesh(
-            new THREE.CylinderGeometry(obstacle.radius, obstacle.radius, 0.34, 32),
-            new THREE.MeshStandardMaterial({ color: 0x4da6ff, emissive: 0x07131e, roughness: 0.45, metalness: 0.08 }),
+            new THREE.BoxGeometry(obstacle.radius * 1.4, 0.52, obstacle.radius * 1.4),
+            new THREE.MeshStandardMaterial({ color: 0x7df0ff, emissive: 0x0b2430, roughness: 0.24, metalness: 0.22 }),
           );
-          mesh.position.set(obstacle.x, 0.17, obstacle.z);
+          mesh.position.set(obstacle.x, 0.26, obstacle.z);
+          mesh.rotation.y = Math.PI / 5;
           this.gameSceneRoot.add(mesh);
           return mesh;
         });
@@ -5593,11 +5675,11 @@ function startSparkViewer() {
       }
 
       updateGameplayVisuals() {
-        if (!this.gameBall || !this.gameShadow) {
+        if (!this.gameBallSplatRoot || !this.gameShadow) {
           return;
         }
         const { position } = this.gameState.ball;
-        this.gameBall.position.set(position.x, position.y, position.z);
+        this.gameBallSplatRoot.position.set(position.x, position.y, position.z);
         this.gameShadow.position.set(position.x, 0.03, position.z);
         this.gameGoal.position.set(this.gameStage.goal.x, 0.04, this.gameStage.goal.z);
         const hue = this.gameState.goalReached ? 0x65ff9f : 0x50f5b2;
@@ -5720,6 +5802,17 @@ function startSparkViewer() {
         this.activeMode = nextMode;
         this.updateModeUi();
         this.updateStatus(`Camera mode: ${this.activeMode === "fps" ? "First-person" : "Orbit"}`);
+        this.invalidateRender();
+      }
+
+      setViewMode(mode) {
+        const nextMode = mode === "tools" ? "tools" : "play";
+        if (this.state.viewMode === nextMode) {
+          return;
+        }
+        this.state.viewMode = nextMode;
+        this.syncViewModeUi();
+        this.updateStatus(nextMode === "play" ? "Play mode enabled" : "Viewer tools enabled");
         this.invalidateRender();
       }
 
@@ -6006,6 +6099,19 @@ function startSparkViewer() {
         this.dom.modeDescription.setAttribute("aria-label", CAMERA_MODE_TEXT[this.activeMode]);
         this.dom.renderModeSelect.value = this.state.renderMode;
         this.updateNormalizeFieldState();
+      }
+
+      syncViewModeUi() {
+        const isPlayMode = this.state.viewMode === "play";
+        document.body.dataset.viewMode = isPlayMode ? "play" : "tools";
+        if (this.dom.viewModeToggleButton) {
+          this.dom.viewModeToggleButton.textContent = isPlayMode ? "Tools" : "Play Mode";
+          this.dom.viewModeToggleButton.setAttribute("aria-pressed", String(!isPlayMode));
+          this.dom.viewModeToggleButton.classList.toggle("toolbar-button-primary", isPlayMode);
+          this.dom.viewModeToggleButton.title = isPlayMode
+            ? "Open the full viewer tools and diagnostics."
+            : "Return to the minimal play layout.";
+        }
       }
 
       setAnimationOriginMode(mode) {

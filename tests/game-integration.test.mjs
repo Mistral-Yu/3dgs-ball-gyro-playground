@@ -14,6 +14,14 @@ test('viewer imports gameplay modules and advances gameplay each frame', () => {
   assert.match(viewerSource, /keepAnimating = keepAnimating \|\| movedByKeys \|\| animationActive \|\| animationShouldRender \|\| gameplayActive;/);
 });
 
+test('viewer renders the gameplay ball as a 3DGS primitive and mixes splat + mesh obstacles', () => {
+  assert.match(viewerSource, /this\.gameStage\.splatObstacles/);
+  assert.match(viewerSource, /this\.gameStage\.meshObstacles/);
+  assert.match(viewerSource, /await this\.createGameplaySplatAsset\(\{\s*kind: "sphere",\s*radius: this\.gameState\.ball\.radius/);
+  assert.match(viewerSource, /this\.gameBallSplatRoot/);
+  assert.doesNotMatch(viewerSource, /new THREE\.SphereGeometry\(0\.22, 32, 24\)/);
+});
+
 test('viewer registers game HUD controls and motion permission actions', () => {
   assert.match(viewerSource, /gamePrimaryButton: document\.getElementById\("game-primary-button"\)/);
   assert.match(viewerSource, /gameEnableMotionButton: document\.getElementById\("game-enable-motion-button"\)/);
