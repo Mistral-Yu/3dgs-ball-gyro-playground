@@ -5547,6 +5547,7 @@ function startSparkViewer() {
         this.gameplayHasLoadedDemo = true;
         this.dom.primitiveSelect.value = "cube";
         await this.loadPrimitive("cube");
+        this.applyDemoSceneLayout();
         this.gameStage.additionalCollisionObstacles = this.collectGameplaySceneCollisionObstacles();
         this.gameState = { ...this.gameState, stage: this.gameStage };
         this.camera.position.set(0, 5.4, 5.8);
@@ -5613,11 +5614,24 @@ function startSparkViewer() {
         } else {
           this.motionState = { ...this.motionState, permission: "granted" };
         }
-        this.gameInputMode = "sensor";
-        this.motionState = { ...this.motionState, mode: "sensor" };
-        this.syncGameplayUi();
-        this.invalidateRender();
+        this.setGameplayInputMode("sensor");
         return true;
+      }
+
+      applyDemoSceneLayout() {
+        const selectedItem = this.getSelectedItem();
+        if (!selectedItem) {
+          return;
+        }
+        selectedItem.transform.rotationX = 0;
+        selectedItem.transform.rotationY = 18;
+        selectedItem.transform.rotationZ = 0;
+        selectedItem.transform.scale = 0.82;
+        selectedItem.transform.translateX = 2.45;
+        selectedItem.transform.translateY = 0.58;
+        selectedItem.transform.translateZ = -2.05;
+        this.applySelectedTransformState(true);
+        this.applyTransformFromInputs(false, true);
       }
 
       calibrateGameplayMotion() {

@@ -3,7 +3,8 @@ const formatTimer = (elapsedMs) => `${(Math.max(0, Number(elapsedMs) || 0) / 100
 export function createGameplayHudModel({ motion = {}, game = {} } = {}) {
   const permission = motion.permission || 'unknown';
   const hasSensorSupport = motion.hasSensorSupport !== false;
-  const usingTouch = game.touchMode || motion.mode === 'touch' || !hasSensorSupport || permission === 'denied';
+  const sensorReady = hasSensorSupport && permission === 'granted' && motion.mode === 'sensor';
+  const usingTouch = !sensorReady && (game.touchMode || motion.mode === 'touch' || !hasSensorSupport || permission === 'denied');
   const gameStatus = game.status || 'idle';
 
   let primaryAction = { id: 'start', label: 'Start Run' };

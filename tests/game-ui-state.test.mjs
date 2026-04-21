@@ -43,6 +43,27 @@ test('HUD model recommends touch mode when the sensor is unavailable', () => {
   assert.match(hud.statusText, /Touch/i);
 });
 
+test('HUD model switches back to sensor guidance once motion is granted even after touch fallback', () => {
+  const hud = createGameplayHudModel({
+    motion: {
+      permission: 'granted',
+      mode: 'sensor',
+      hasSensorSupport: true,
+    },
+    game: {
+      status: 'idle',
+      goalReached: false,
+      elapsedMs: 0,
+      touchMode: true,
+    },
+  });
+
+  assert.equal(hud.primaryAction.id, 'start');
+  assert.equal(hud.showTouchHint, false);
+  assert.equal(hud.showCalibrate, true);
+  assert.doesNotMatch(hud.statusText, /Touch/i);
+});
+
 test('HUD model surfaces a win state with retry affordance and formatted timer', () => {
   const hud = createGameplayHudModel({
     motion: {

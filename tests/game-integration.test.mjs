@@ -35,6 +35,14 @@ test('viewer registers game HUD controls and motion permission actions', () => {
   assert.match(viewerSource, /gameCalibrateButton: document\.getElementById\("game-calibrate-button"\)/);
   assert.match(viewerSource, /this\.dom\.gameEnableMotionButton\?\.addEventListener\("click", \(\) => this\.requestMotionPermission\(\)\)/);
   assert.match(viewerSource, /window\.addEventListener\("deviceorientation", this\.handleDeviceOrientation, true\);/);
+  assert.match(viewerSource, /this\.setGameplayInputMode\("sensor"\);/);
+});
+
+test('viewer repositions the default cube demo away from the gameplay ball and splat obstacles', () => {
+  assert.match(viewerSource, /selectedItem\.transform\.translateX = 2\.45;/);
+  assert.match(viewerSource, /selectedItem\.transform\.translateY = 0\.58;/);
+  assert.match(viewerSource, /selectedItem\.transform\.translateZ = -2\.05;/);
+  assert.match(viewerSource, /selectedItem\.transform\.scale = 0\.82;/);
 });
 
 test('index defaults the primitive picker to cube for the gameplay demo', () => {
