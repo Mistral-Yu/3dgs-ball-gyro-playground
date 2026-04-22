@@ -1387,7 +1387,7 @@ function startSparkViewer() {
           exportFalloff: true,
           exportOpacity: true,
           exportSh: true,
-          exposure: 0,
+          exposure: -5,
           toneCurve: buildToneCurveState(),
           falloff: 1,
           focalLength: 14,
@@ -5501,6 +5501,9 @@ function startSparkViewer() {
         this.gameBall = ballAsset.mesh;
         this.gameBallSplatRoot = ballAsset.root;
         this.gameSceneRoot.add(this.gameBallSplatRoot);
+        this.gameBallLight = new THREE.PointLight(0xffffff, 20, 2.8, 2);
+        this.gameBallLight.position.set(0, 1.2, 0);
+        this.gameSceneRoot.add(this.gameBallLight);
 
         this.gameGoal = new THREE.Mesh(
           new THREE.TorusGeometry(0.42, 0.04, 16, 48),
@@ -5534,8 +5537,8 @@ function startSparkViewer() {
           return mesh;
         });
 
-        const ambient = new THREE.AmbientLight(0xffffff, 0.85);
-        const key = new THREE.DirectionalLight(0xffffff, 1.2);
+        const ambient = new THREE.AmbientLight(0xffffff, 0.04);
+        const key = new THREE.DirectionalLight(0xffffff, 0.18);
         key.position.set(4, 7, 5);
         this.gameSceneRoot.add(ambient);
         this.gameSceneRoot.add(key);
@@ -5689,6 +5692,7 @@ function startSparkViewer() {
         const { position } = this.gameState.ball;
         this.gameBallSplatRoot.position.set(position.x, position.y, position.z);
         this.gameShadow.position.set(position.x, 0.03, position.z);
+        this.gameBallLight?.position.set(position.x, position.y + 0.85, position.z);
         this.gameGoal.position.set(this.gameStage.goal.x, 0.04, this.gameStage.goal.z);
         const hue = this.gameState.goalReached ? 0x65ff9f : 0x50f5b2;
         this.gameGoal.material.color.setHex(hue);

@@ -60,6 +60,14 @@ test('viewer uses an opaque gameplay floor mesh to avoid translucent base flicke
   assert.doesNotMatch(viewerSource, /const planeMaterial = new THREE\.MeshBasicMaterial\(\{[\s\S]*?opacity: 0\.36,[\s\S]*?transparent: true,[\s\S]*?\}\);/);
 });
 
+test('viewer starts with scene exposure at -5 and adds a ball-following point light for gameplay', () => {
+  assert.match(viewerSource, /exposure:\s*-5,/);
+  assert.match(viewerSource, /this\.gameBallLight = new THREE\.PointLight\(0xffffff, 20(?:\.0)?, 2\.8, 2\);/);
+  assert.match(viewerSource, /this\.gameBallLight\?\.position\.set\(position\.x, position\.y \+ 0\.85, position\.z\);/);
+  assert.match(viewerSource, /const ambient = new THREE\.AmbientLight\(0xffffff, 0\.04\);/);
+  assert.match(viewerSource, /const key = new THREE\.DirectionalLight\(0xffffff, 0\.18\);/);
+});
+
 test('index defaults the primitive picker to cube for the gameplay demo', () => {
   assert.match(htmlSource, /<option value="cube" selected>Cube<\/option>/);
   assert.doesNotMatch(htmlSource, /<option value="sphere" selected>Sphere<\/option>/);
