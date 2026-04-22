@@ -5,6 +5,7 @@ export const DEFAULT_GAME_CONFIG = {
   acceleration: 12,
   accelerationResponsiveness: 18,
   damping: 0.96,
+  fallAcceleration: 22,
   restitution: 0.68,
   maxSpeed: 5.5,
   obstacleBounce: 0.72,
@@ -14,6 +15,8 @@ export const DEFAULT_GAME_CONFIG = {
 
 export function createDefaultStage(overrides = {}) {
   const stage = {
+    dropOnExit: true,
+    fallResetY: -2.8,
     spawn: { x: -2.4, y: 0.35, z: -2.1 },
     bounds: {
       minX: -3.2,
@@ -195,6 +198,7 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
   const acceleration = Number(config.acceleration) || DEFAULT_GAME_CONFIG.acceleration;
   const accelerationResponsiveness = Math.max(0, Number(config.accelerationResponsiveness) || DEFAULT_GAME_CONFIG.accelerationResponsiveness);
   const damping = clamp(Number(config.damping) || DEFAULT_GAME_CONFIG.damping, 0, 1);
+  const fallAcceleration = Math.max(0, Number(config.fallAcceleration) || DEFAULT_GAME_CONFIG.fallAcceleration);
   const restitution = clamp(Number(config.restitution) || DEFAULT_GAME_CONFIG.restitution, 0, 1);
   const obstacleBounce = clamp(Number(config.obstacleBounce) || DEFAULT_GAME_CONFIG.obstacleBounce, 0, 1);
   const settleSpeed = Math.max(0, Number(config.settleSpeed) || DEFAULT_GAME_CONFIG.settleSpeed);
@@ -206,17 +210,45 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
     ...safeState.ball,
     acceleration: {
       ...(safeState.ball.acceleration || { x: 0, y: 0, z: 0 }),
-      y: 0,
+      y: safeState.status === 'falling' ? (safeState.ball.acceleration?.y || 0) : 0,
     },
     velocity: {
       ...safeState.ball.velocity,
-      y: 0,
+      y: safeState.status === 'falling' ? (safeState.ball.velocity?.y || 0) : 0,
     },
   };
   const maxSpeed = Number(config.maxSpeed) || DEFAULT_GAME_CONFIG.maxSpeed;
   const minSubstep = 1 / 120;
   const substeps = Math.max(1, Math.ceil(deltaSeconds / minSubstep));
   const substepSeconds = deltaSeconds / substeps;
+
+  if (safeState.status === 'falling') {
+    for (let stepIndex = 0; stepIndex < substeps; stepIndex += 1) {
+      ball.acceleration = { x: 0, y: -fallAcceleration, z: 0 };
+      ball.velocity = {
+        x: ball.velocity.x * damping,
+        y: ball.velocity.y + (ball.acceleration.y * substepSeconds),
+        z: ball.velocity.z * damping,
+      };
+      ball.position = {
+        x: ball.position.x + (ball.velocity.x * substepSeconds),
+        y: ball.position.y + (ball.velocity.y * substepSeconds),
+        z: ball.position.z + (ball.velocity.z * substepSeconds),
+      };
+    }
+
+    if (ball.position.y <= (Number(stage.fallResetY) || -2.8)) {
+      return resetGameState(safeState);
+    }
+
+    return {
+      ...safeState,
+      status: 'falling',
+      elapsedMs: safeState.elapsedMs + Math.round(deltaSeconds * 1000),
+      goalReached: false,
+      ball,
+    };
+  }
 
   for (let stepIndex = 0; stepIndex < substeps; stepIndex += 1) {
     const accelerationBlend = clamp(accelerationResponsiveness * substepSeconds, 0, 1);
@@ -249,21 +281,40 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
     const minZ = stage.bounds.minZ + ball.radius;
     const maxZ = stage.bounds.maxZ - ball.radius;
 
-    if (ball.position.x < minX) {
-      ball.position.x = minX;
-      ball.velocity.x = Math.abs(ball.velocity.x) * restitution;
-    }
-    if (ball.position.x > maxX) {
-      ball.position.x = maxX;
-      ball.velocity.x = -Math.abs(ball.velocity.x) * restitution;
-    }
-    if (ball.position.z < minZ) {
-      ball.position.z = minZ;
-      ball.velocity.z = Math.abs(ball.velocity.z) * restitution;
-    }
-    if (ball.position.z > maxZ) {
-      ball.position.z = maxZ;
-      ball.velocity.z = -Math.abs(ball.velocity.z) * restitution;
+    if (stage.dropOnExit) {
+      const hasLeftStage = ball.position.x < minX
+        || ball.position.x > maxX
+        || ball.position.z < minZ
+        || ball.position.z > maxZ;
+      if (hasLeftStage) {
+        ball.acceleration = { x: 0, y: -fallAcceleration, z: 0 };
+        ball.velocity.y = Math.min(ball.velocity.y, -0.35);
+        ball.position.y += ball.velocity.y * substepSeconds;
+        return {
+          ...safeState,
+          status: 'falling',
+          elapsedMs: safeState.elapsedMs + Math.round(deltaSeconds * 1000),
+          goalReached: false,
+          ball,
+        };
+      }
+    } else {
+      if (ball.position.x < minX) {
+        ball.position.x = minX;
+        ball.velocity.x = Math.abs(ball.velocity.x) * restitution;
+      }
+      if (ball.position.x > maxX) {
+        ball.position.x = maxX;
+        ball.velocity.x = -Math.abs(ball.velocity.x) * restitution;
+      }
+      if (ball.position.z < minZ) {
+        ball.position.z = minZ;
+        ball.velocity.z = Math.abs(ball.velocity.z) * restitution;
+      }
+      if (ball.position.z > maxZ) {
+        ball.position.z = maxZ;
+        ball.velocity.z = -Math.abs(ball.velocity.z) * restitution;
+      }
     }
 
     const collisionObstacles = getStageCollisionObstacles(stage);

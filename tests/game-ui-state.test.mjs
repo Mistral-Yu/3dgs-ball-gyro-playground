@@ -82,3 +82,22 @@ test('HUD model surfaces a win state with retry affordance and formatted timer',
   assert.equal(hud.timerText, '12.35s');
   assert.equal(hud.showCalibrate, true);
 });
+
+test('HUD model shows a restart message while the ball is falling off the stage', () => {
+  const hud = createGameplayHudModel({
+    motion: {
+      permission: 'granted',
+      mode: 'sensor',
+      hasSensorSupport: true,
+    },
+    game: {
+      status: 'falling',
+      goalReached: false,
+      elapsedMs: 980,
+    },
+  });
+
+  assert.equal(hud.primaryAction.id, 'restart');
+  assert.match(hud.primaryAction.label, /Restart/i);
+  assert.match(hud.statusText, /Restarting/i);
+});

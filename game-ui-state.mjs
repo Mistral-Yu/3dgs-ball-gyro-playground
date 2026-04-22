@@ -12,6 +12,9 @@ export function createGameplayHudModel({ motion = {}, game = {} } = {}) {
   if (gameStatus === 'won' || game.goalReached) {
     primaryAction = { id: 'retry', label: 'Retry' };
     statusText = 'Goal reached. Nice run.';
+  } else if (gameStatus === 'falling') {
+    primaryAction = { id: 'restart', label: 'Restarting…' };
+    statusText = 'Fell off the stage. Restarting.';
   } else if (!hasSensorSupport || permission === 'denied') {
     primaryAction = { id: 'sensor-unavailable', label: 'Motion Unavailable' };
     statusText = 'Motion sensor unavailable on this device.';

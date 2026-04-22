@@ -502,6 +502,7 @@ function startSparkViewer() {
       });
 
     const createPointLightColorModifier = ({
+      lightBoostScale = 1,
       lightColorB,
       lightColorG,
       lightColorR,
@@ -520,6 +521,7 @@ function startSparkViewer() {
         const floatZero = dynoConst("float", 0);
         const floatOne = dynoConst("float", 1);
         const floatEps = dynoConst("float", 0.0001);
+        const lightBoostScaleValue = dynoConst("float", lightBoostScale);
         let lightBoostR = floatZero;
         let lightBoostG = floatZero;
         let lightBoostB = floatZero;
@@ -530,7 +532,7 @@ function startSparkViewer() {
           const lightVector = sub(center, lightPosition);
           const lightDistanceSq = max(dot(lightVector, lightVector), floatEps);
           const lightRangeSq = max(mul(lightRange, lightRange), floatEps);
-          const lightStrength = mul(lightIntensity, div(lightRangeSq, add(lightDistanceSq, lightRangeSq)));
+          const lightStrength = mul(mul(lightIntensity, lightBoostScaleValue), div(lightRangeSq, add(lightDistanceSq, lightRangeSq)));
           lightBoostR = add(lightBoostR, mul(lightColorR[lightIndex], lightStrength));
           lightBoostG = add(lightBoostG, mul(lightColorG[lightIndex], lightStrength));
           lightBoostB = add(lightBoostB, mul(lightColorB[lightIndex], lightStrength));
@@ -3041,6 +3043,40 @@ function startSparkViewer() {
         };
       }
 
+      buildActivePointLightWorldModifiers(baseWorldModifier = null, { lightBoostScale = 1 } = {}) {
+        const worldModifiers = [];
+        if (baseWorldModifier) {
+          worldModifiers.push(baseWorldModifier);
+        }
+        if (this.activeLightCount > 0) {
+          worldModifiers.push(createPointLightColorModifier({
+            lightBoostScale,
+            lightColorB: this.lightHandles.colorB,
+            lightColorG: this.lightHandles.colorG,
+            lightColorR: this.lightHandles.colorR,
+            lightCount: this.activeLightCount,
+            lightIntensities: this.lightHandles.intensities,
+            lightPositions: this.lightHandles.positions,
+            lightRanges: this.lightHandles.ranges,
+          }));
+        }
+        return worldModifiers;
+      }
+
+      syncGameplaySplatLightModifiers() {
+        const gameplayAssets = [
+          this.gameBall ? { mesh: this.gameBall, lightBoostScale: 1.18 } : null,
+          ...(this.gameSplatObstacleAssets ?? []),
+        ].filter(Boolean);
+        gameplayAssets.forEach(({ mesh, lightBoostScale = 1 }) => {
+          mesh.worldModifier = undefined;
+          mesh.worldModifiers = this.buildActivePointLightWorldModifiers(null, { lightBoostScale });
+          mesh.covWorldModifiers = mesh.worldModifiers;
+          mesh.updateMatrixWorld(true);
+          mesh.context?.transform?.updateFromMatrix(mesh.matrixWorld);
+        });
+      }
+
       syncLightingRuntimeState() {
         this.syncVisibleSceneItemTransforms();
         this.lightSceneRoot.updateMatrixWorld(true);
@@ -5539,8 +5575,8 @@ function startSparkViewer() {
         this.gameBall = ballAsset.mesh;
         this.gameBallSplatRoot = ballAsset.root;
         this.gameSceneRoot.add(this.gameBallSplatRoot);
-        this.gameBallLight = new THREE.PointLight(0xffffff, 20, 2.8, 2);
-        this.gameBallLight.position.set(0, 1.2, 0);
+        this.gameBallLight = new THREE.PointLight(0xffffff, 28, 4.2, 2);
+        this.gameBallLight.position.set(0, 1.7, 0);
         this.gameSceneRoot.add(this.gameBallLight);
 
         this.gameGoal = new THREE.Mesh(
@@ -5583,6 +5619,8 @@ function startSparkViewer() {
         this.gameGoal.position.set(this.gameStage.goal.x, 0.04, this.gameStage.goal.z);
         this.gameSceneRoot.visible = true;
         this.updateGameplayVisuals();
+        this.syncLightingRuntimeState();
+        this.syncGameplaySplatLightModifiers();
       }
 
       async ensureGameplayDemoLoaded() {
@@ -5595,9 +5633,9 @@ function startSparkViewer() {
         this.applyDemoSceneLayout();
         this.gameStage.additionalCollisionObstacles = this.collectGameplaySceneCollisionObstacles();
         this.gameState = { ...this.gameState, stage: this.gameStage };
-        this.camera.position.set(0, 4.9, 5.15);
-        this.camera.lookAt(0, 0.25, 0);
-        this.orbitControls.target.set(0, 0.25, 0);
+        this.camera.position.set(0.24, 5.55, 4.2);
+        this.camera.lookAt(0.35, 0.3, -0.12);
+        this.orbitControls.target.set(0.35, 0.3, -0.12);
         this.orbitControls.update();
         this.firstPerson.syncFromCamera();
         this.updateStatus("Gameplay sample loaded. Open another splat any time.");
@@ -5708,6 +5746,7 @@ function startSparkViewer() {
           };
         }
         const shouldStep = this.gameState.status === "playing"
+          || this.gameState.status === "falling"
           || Math.abs(inputVector.x) > 0.001
           || Math.abs(inputVector.z) > 0.001;
         if (!shouldStep && this.gameState.status !== "won") {
@@ -5729,10 +5768,12 @@ function startSparkViewer() {
         }
         const { position } = this.gameState.ball;
         this.gameBallSplatRoot.position.set(position.x, position.y, position.z);
+        this.gameShadow.visible = position.y > 0.08;
         this.gameShadow.position.set(position.x, 0.03, position.z);
-        this.gameBallLight?.position.set(position.x, position.y + 0.85, position.z);
+        this.gameBallLight?.position.set(position.x, position.y + 1.55, position.z);
         if (this.sceneItems.length > 0) {
           this.syncLightingRuntimeState();
+          this.syncGameplaySplatLightModifiers();
           this.queueSparkSceneUpdate();
         }
         this.gameGoal.position.set(this.gameStage.goal.x, 0.04, this.gameStage.goal.z);
@@ -5914,21 +5955,7 @@ function startSparkViewer() {
           item.mesh.updateMatrixWorld(true);
           item.mesh.context?.transform?.updateFromMatrix(item.mesh.matrixWorld);
           if (itemMode === "beauty") {
-            const worldModifiers = [];
-            if (item.baseWorldModifier) {
-              worldModifiers.push(item.baseWorldModifier);
-            }
-            if (this.activeLightCount > 0) {
-              worldModifiers.push(createPointLightColorModifier({
-                lightColorB: this.lightHandles.colorB,
-                lightColorG: this.lightHandles.colorG,
-                lightColorR: this.lightHandles.colorR,
-                lightCount: this.activeLightCount,
-                lightIntensities: this.lightHandles.intensities,
-                lightPositions: this.lightHandles.positions,
-                lightRanges: this.lightHandles.ranges,
-              }));
-            }
+            const worldModifiers = this.buildActivePointLightWorldModifiers(item.baseWorldModifier);
             if (item.id === this.selectedSceneItemId && !isNeutralToneCurve(item.settings.toneCurve)) {
               worldModifiers.push(createToneCurveColorModifier(item.settings.toneCurve));
             }
@@ -5952,6 +5979,7 @@ function startSparkViewer() {
             item.mesh.covWorldModifiers = undefined;
           }
         });
+        this.syncGameplaySplatLightModifiers();
         this.syncMeshExposure();
         this.applyShLevel(true);
         this.updateNormalizeFieldState();

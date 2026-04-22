@@ -73,7 +73,7 @@ test('stepGameState returns to idle once the ball has fully settled so the next 
 });
 
 test('stepGameState clamps the ball inside the stage walls and bounces velocity', () => {
-  const stage = createDefaultStage();
+  const stage = createDefaultStage({ dropOnExit: false });
   const state = {
     ...createDefaultGameState(stage),
     status: 'playing',
@@ -87,6 +87,43 @@ test('stepGameState clamps the ball inside the stage walls and bounces velocity'
 
   assert.ok(next.ball.position.x <= stage.bounds.maxX - next.ball.radius + 1e-6);
   assert.ok(next.ball.velocity.x < 0, `expected reflected x velocity, got ${next.ball.velocity.x}`);
+});
+
+test('stepGameState lets the ball fall off the stage and restarts from spawn after it drops below the reset height', () => {
+  const stage = createDefaultStage({
+    fallResetY: -1.4,
+    spawn: { x: -2.4, y: 0.35, z: -2.1 },
+  });
+  const initial = createDefaultGameState(stage);
+  const leavingState = {
+    ...initial,
+    status: 'playing',
+    elapsedMs: 880,
+    ball: {
+      ...initial.ball,
+      position: { x: stage.bounds.maxX + 0.12, y: stage.spawn.y, z: stage.spawn.z },
+      velocity: { x: 0.9, y: 0, z: 0.1 },
+    },
+  };
+
+  const falling = stepGameState(leavingState, { x: 0.4, z: 0 }, 1 / 60, DEFAULT_GAME_CONFIG);
+  assert.equal(falling.status, 'falling');
+  assert.ok(falling.ball.position.y < stage.spawn.y, `expected falling y, got ${falling.ball.position.y}`);
+  assert.ok(falling.elapsedMs > leavingState.elapsedMs, `expected timer to advance while falling, got ${falling.elapsedMs}`);
+
+  let restarted = falling;
+  for (let index = 0; index < 60; index += 1) {
+    restarted = stepGameState(restarted, { x: 0, z: 0 }, 1 / 60, DEFAULT_GAME_CONFIG);
+    if (restarted.status === 'idle' && restarted.elapsedMs === 0) {
+      break;
+    }
+  }
+  assert.equal(restarted.status, 'idle');
+  assert.equal(restarted.goalReached, false);
+  assert.equal(restarted.elapsedMs, 0);
+  assert.deepEqual(restarted.ball.position, stage.spawn);
+  assert.deepEqual(restarted.ball.velocity, { x: 0, y: 0, z: 0 });
+  assert.deepEqual(restarted.ball.acceleration, { x: 0, y: 0, z: 0 });
 });
 
 test('stepGameState resolves circular obstacle collisions without tunneling through the obstacle', () => {
