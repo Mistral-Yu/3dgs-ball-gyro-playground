@@ -66,6 +66,14 @@ test('viewer starts with scene exposure at -5 and adds a ball-following point li
   assert.match(viewerSource, /this\.gameBallLight\?\.position\.set\(position\.x, position\.y \+ 0\.85, position\.z\);/);
   assert.match(viewerSource, /const ambient = new THREE\.AmbientLight\(0xffffff, 0\.04\);/);
   assert.match(viewerSource, /const key = new THREE\.DirectionalLight\(0xffffff, 0\.18\);/);
+  assert.match(viewerSource, /const gameplayLight = this\.getGameplaySplatLightRecord\(\);/);
+  assert.match(viewerSource, /if \(gameplayLight\) \{\s*activeLights\.push\(gameplayLight\);\s*\}/);
+});
+
+test('viewer moves the initial gameplay camera slightly closer to the stage', () => {
+  assert.match(viewerSource, /this\.camera\.position\.set\(0, 4\.9, 5\.15\);/);
+  assert.match(viewerSource, /this\.camera\.lookAt\(0, 0\.25, 0\);/);
+  assert.match(viewerSource, /this\.orbitControls\.target\.set\(0, 0\.25, 0\);/);
 });
 
 test('index defaults the primitive picker to cube for the gameplay demo', () => {

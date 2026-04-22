@@ -3018,10 +3018,26 @@ function startSparkViewer() {
         return samples;
       }
 
+      getGameplaySplatLightRecord() {
+        if (!this.gameBallLight || !this.gameBallLight.visible) {
+          return null;
+        }
+        return {
+          color: clampLightColor(this.gameBallLight.color ?? { r: 1, g: 1, b: 1 }),
+          intensity: this.gameBallLight.intensity,
+          position: this.gameBallLight.getWorldPosition(new THREE.Vector3()),
+          visible: true,
+        };
+      }
+
       syncLightingRuntimeState() {
         this.syncVisibleSceneItemTransforms();
         this.lightSceneRoot.updateMatrixWorld(true);
         const activeLights = this.sceneLights.filter((light) => light.visible);
+        const gameplayLight = this.getGameplaySplatLightRecord();
+        if (gameplayLight) {
+          activeLights.push(gameplayLight);
+        }
         this.activeLightCount = activeLights.length;
         this.ensureDynoHandleArray(
           this.lightHandles.positions,
@@ -3048,11 +3064,16 @@ function startSparkViewer() {
           this.activeLightCount,
           (index) => dynoFloat(DEFAULT_LIGHT_COLOR.b, `viewerLightColorB${index}`),
         );
-        const lightWorldPosition = new THREE.Vector3();
         activeLights.forEach((light, index) => {
-          light.root.updateMatrixWorld(true);
-          light.root.getWorldPosition(lightWorldPosition);
-          light.position.copy(lightWorldPosition);
+          if (light.root) {
+            light.root.updateMatrixWorld(true);
+          }
+          const lightWorldPosition = light.position?.isVector3
+            ? light.position
+            : (light.root?.getWorldPosition?.(new THREE.Vector3()) ?? new THREE.Vector3());
+          if (light.root) {
+            light.position.copy(lightWorldPosition);
+          }
           const lightColor = clampLightColor(light.color ?? DEFAULT_LIGHT_COLOR);
           this.lightHandles.positions[index].value.copy(lightWorldPosition);
           this.lightHandles.intensities[index].value = light.intensity;
@@ -5557,7 +5578,7 @@ function startSparkViewer() {
         this.applyDemoSceneLayout();
         this.gameStage.additionalCollisionObstacles = this.collectGameplaySceneCollisionObstacles();
         this.gameState = { ...this.gameState, stage: this.gameStage };
-        this.camera.position.set(0, 5.4, 5.8);
+        this.camera.position.set(0, 4.9, 5.15);
         this.camera.lookAt(0, 0.25, 0);
         this.orbitControls.target.set(0, 0.25, 0);
         this.orbitControls.update();
@@ -5693,6 +5714,10 @@ function startSparkViewer() {
         this.gameBallSplatRoot.position.set(position.x, position.y, position.z);
         this.gameShadow.position.set(position.x, 0.03, position.z);
         this.gameBallLight?.position.set(position.x, position.y + 0.85, position.z);
+        if (this.sceneItems.length > 0) {
+          this.syncLightingRuntimeState();
+          this.queueSparkSceneUpdate();
+        }
         this.gameGoal.position.set(this.gameStage.goal.x, 0.04, this.gameStage.goal.z);
         const hue = this.gameState.goalReached ? 0x65ff9f : 0x50f5b2;
         this.gameGoal.material.color.setHex(hue);
