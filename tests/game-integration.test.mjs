@@ -15,18 +15,23 @@ test('viewer imports gameplay modules and advances gameplay each frame', () => {
 });
 
 test('viewer renders the gameplay ball as a primitive-sphere-matched 3DGS asset, mixes splat + mesh obstacles, and mirrors scene items into gameplay box collision', () => {
+  assert.match(viewerSource, /const tintGameplaySphereSplatColor = \(baseColor, sourceColor\) => \{/);
   assert.match(viewerSource, /this\.gameStage\.splatObstacles/);
   assert.match(viewerSource, /this\.gameStage\.meshObstacles/);
+  assert.match(viewerSource, /colorHex: 0x5c9be0,/);
+  assert.match(viewerSource, /alpha: 0\.8,/);
   assert.match(viewerSource, /this\.gameStage\.additionalCollisionObstacles = this\.collectGameplaySceneCollisionObstacles\(\);/);
   assert.match(viewerSource, /collectGameplaySceneCollisionObstacles\(\)/);
   assert.match(viewerSource, /shape: "box"/);
   assert.match(viewerSource, /halfSizeX,/);
   assert.match(viewerSource, /halfSizeZ,/);
   assert.match(viewerSource, /rotation,/);
-  assert.match(viewerSource, /await this\.createGameplaySplatAsset\(\{\s*kind: "sphere",\s*radius: this\.gameState\.ball\.radius\s*\}\)/);
+  assert.match(viewerSource, /await this\.createGameplaySplatAsset\(\{\s*kind: "sphere",\s*radius: this\.gameState\.ball\.radius,\s*colorHex: 0x71777f,\s*alpha: 0\.92\s*\}\)/);
   assert.match(viewerSource, /this\.gameBallSplatRoot/);
-  assert.doesNotMatch(viewerSource, /await this\.createGameplaySplatAsset\(\{\s*kind: "sphere",\s*radius: this\.gameState\.ball\.radius,\s*colorHex:/);
-  assert.doesNotMatch(viewerSource, /new THREE\.SphereGeometry\(0\.22, 32, 24\)/);
+  assert.match(viewerSource, /if \(kind === "sphere"\) \{/);
+  assert.match(viewerSource, /kind === "sphere"\s*\? tintGameplaySphereSplatColor\(overrideColor, splat\.color\)\s*:\s*overrideColor\.clone\(\)/);
+  assert.match(viewerSource, /new THREE\.SphereGeometry\(radius \* 0\.98, 24, 18\)/);
+  assert.match(viewerSource, /new THREE\.MeshPhongMaterial\(\{/);
 });
 
 test('viewer registers game HUD controls and motion permission actions', () => {
@@ -65,11 +70,11 @@ test('viewer starts in play mode with grid and axes helpers disabled by default'
   assert.match(viewerSource, /showGrid:\s*false,/);
 });
 
-test('viewer starts with scene exposure at -5 and adds a lower, softer ball-following point light for gameplay', () => {
-  assert.match(viewerSource, /exposure:\s*-5,/);
-  assert.match(viewerSource, /this\.gameBallLight = new THREE\.PointLight\(0xffffff, 8\.5, 1\.55, 2\);/);
-  assert.match(viewerSource, /this\.gameBallLight\.position\.set\(0, 0\.58, 0\);/);
-  assert.match(viewerSource, /this\.gameBallLight\?\.position\.set\(position\.x, position\.y \+ 0\.42, position\.z\);/);
+test('viewer starts with scene exposure at -4.25 and adds a lower, softer ball-following point light for gameplay', () => {
+  assert.match(viewerSource, /exposure:\s*-4\.25,/);
+  assert.match(viewerSource, /this\.gameBallLight = new THREE\.PointLight\(0xffffff, 8\.2, 1\.08, 2\);/);
+  assert.match(viewerSource, /this\.gameBallLight\.position\.set\(0\.16, 0\.62, -0\.12\);/);
+  assert.match(viewerSource, /this\.gameBallLight\?\.position\.set\(position\.x \+ 0\.16, position\.y \+ 0\.44, position\.z - 0\.12\);/);
   assert.match(viewerSource, /const ambient = new THREE\.AmbientLight\(0xffffff, 0\.02\);/);
   assert.match(viewerSource, /const key = new THREE\.DirectionalLight\(0xffffff, 0\.08\);/);
   assert.match(viewerSource, /new THREE\.MeshStandardMaterial\(\{ color: 0x7df0ff, emissive: 0x030c10, roughness: 0\.72, metalness: 0\.03 \}\)/);
@@ -81,8 +86,8 @@ test('viewer starts with scene exposure at -5 and adds a lower, softer ball-foll
   assert.match(viewerSource, /lightBoostScale = 1,/);
   assert.match(viewerSource, /const lightStrength = mul\(mul\(lightIntensity, lightBoostScaleValue\), div\(lightRangeSq, add\(lightDistanceSq, lightRangeSq\)\)\);/);
   assert.match(viewerSource, /syncGameplaySplatLightModifiers\(\)/);
-  assert.match(viewerSource, /this\.gameBall\s*\?\s*\{ mesh: this\.gameBall, lightBoostScale: 2\.2 \}\s*:\s*null/);
-  assert.match(viewerSource, /\.{3}\(this\.gameSplatObstacleAssets \?\? \[\]\)\.map\(\(asset\) => \(\{ \.\.\.asset, lightBoostScale: 1\.9 \}\)\),/);
+  assert.match(viewerSource, /this\.gameBall\s*\?\s*\{ mesh: this\.gameBall, lightBoostScale: 1\.5 \}\s*:\s*null/);
+  assert.match(viewerSource, /\.\.\.\(this\.gameSplatObstacleAssets \?\? \[\]\)\.map\(\(asset\) => \(\{ \.\.\.asset, lightBoostScale: 1\.9 \}\)\),/);
   assert.match(viewerSource, /mesh\.worldModifiers = this\.buildActivePointLightWorldModifiers\(null, \{ lightBoostScale \}\);/);
 });
 

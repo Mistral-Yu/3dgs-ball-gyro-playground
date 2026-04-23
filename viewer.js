@@ -861,6 +861,13 @@ function startSparkViewer() {
       };
     };
 
+    const tintGameplaySphereSplatColor = (baseColor, sourceColor) => {
+      if (!baseColor) {
+        return sourceColor.clone();
+      }
+      return sourceColor.clone().lerp(baseColor, 0.62);
+    };
+
     const createGameplayPrimitiveSpec = async ({
       alpha = null,
       colorHex = null,
@@ -875,7 +882,11 @@ function startSparkViewer() {
       const splats = definition.splatDefinitions.map((splat) => ({
         ...splat,
         alpha: overrideAlpha ?? splat.alpha,
-        color: overrideColor ? overrideColor.clone() : splat.color.clone(),
+        color: overrideColor
+          ? (kind === "sphere"
+            ? tintGameplaySphereSplatColor(overrideColor, splat.color)
+            : overrideColor.clone())
+          : splat.color.clone(),
         position: splat.position.clone().multiply(scaleVector),
         scale: splat.scale.clone().multiplyScalar(scaledRadius),
       }));
@@ -1394,7 +1405,7 @@ function startSparkViewer() {
           exportFalloff: true,
           exportOpacity: true,
           exportSh: true,
-          exposure: -5,
+          exposure: -4.25,
           toneCurve: buildToneCurveState(),
           falloff: 1,
           focalLength: 14,
@@ -3065,7 +3076,7 @@ function startSparkViewer() {
 
       syncGameplaySplatLightModifiers() {
         const gameplayAssets = [
-          this.gameBall ? { mesh: this.gameBall, lightBoostScale: 2.2 } : null,
+          this.gameBall ? { mesh: this.gameBall, lightBoostScale: 1.5 } : null,
           ...(this.gameSplatObstacleAssets ?? []).map((asset) => ({ ...asset, lightBoostScale: 1.9 })),
         ].filter(Boolean);
         gameplayAssets.forEach(({ mesh, lightBoostScale = 1 }) => {
@@ -5502,6 +5513,23 @@ function startSparkViewer() {
         root.name = `${spec.name}-root`;
         root.position.copy(position);
         root.add(mesh);
+        if (kind === "sphere") {
+          const shadeColor = colorHex == null ? 0x71777f : colorHex;
+          const shadeMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(radius * 0.98, 24, 18),
+            new THREE.MeshPhongMaterial({
+              color: shadeColor,
+              emissive: 0x05080a,
+              specular: 0xdde6ff,
+              shininess: 85,
+              transparent: true,
+              opacity: 0.5,
+              depthWrite: false,
+            }),
+          );
+          shadeMesh.renderOrder = 6;
+          root.add(shadeMesh);
+        }
         root.updateMatrixWorld(true);
         return { mesh, root, spec };
       }
@@ -5574,12 +5602,12 @@ function startSparkViewer() {
         this.gameShadow.position.y = 0.02;
         this.gameSceneRoot.add(this.gameShadow);
 
-        const ballAsset = await this.createGameplaySplatAsset({ kind: "sphere", radius: this.gameState.ball.radius });
+        const ballAsset = await this.createGameplaySplatAsset({ kind: "sphere", radius: this.gameState.ball.radius, colorHex: 0x71777f, alpha: 0.92 });
         this.gameBall = ballAsset.mesh;
         this.gameBallSplatRoot = ballAsset.root;
         this.gameSceneRoot.add(this.gameBallSplatRoot);
-        this.gameBallLight = new THREE.PointLight(0xffffff, 8.5, 1.55, 2);
-        this.gameBallLight.position.set(0, 0.58, 0);
+        this.gameBallLight = new THREE.PointLight(0xffffff, 8.2, 1.08, 2);
+        this.gameBallLight.position.set(0.16, 0.62, -0.12);
         this.gameSceneRoot.add(this.gameBallLight);
 
         this.gameGoal = new THREE.Mesh(
@@ -5595,8 +5623,8 @@ function startSparkViewer() {
             const asset = await this.createGameplaySplatAsset({
               kind: "sphere",
               radius: obstacle.radius,
-              colorHex: 0x4da6ff,
-              alpha: 0.88,
+              colorHex: 0x5c9be0,
+              alpha: 0.8,
               position: new THREE.Vector3(obstacle.x, obstacle.radius, obstacle.z),
             });
             this.gameSceneRoot.add(asset.root);
@@ -5773,7 +5801,7 @@ function startSparkViewer() {
         this.gameBallSplatRoot.position.set(position.x, position.y, position.z);
         this.gameShadow.visible = position.y > 0.08;
         this.gameShadow.position.set(position.x, 0.03, position.z);
-        this.gameBallLight?.position.set(position.x, position.y + 0.42, position.z);
+        this.gameBallLight?.position.set(position.x + 0.16, position.y + 0.44, position.z - 0.12);
         if (this.sceneItems.length > 0) {
           this.syncLightingRuntimeState();
           this.syncGameplaySplatLightModifiers();
