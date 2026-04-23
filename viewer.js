@@ -3065,8 +3065,8 @@ function startSparkViewer() {
 
       syncGameplaySplatLightModifiers() {
         const gameplayAssets = [
-          this.gameBall ? { mesh: this.gameBall, lightBoostScale: 1.0 } : null,
-          ...(this.gameSplatObstacleAssets ?? []),
+          this.gameBall ? { mesh: this.gameBall, lightBoostScale: 2.2 } : null,
+          ...(this.gameSplatObstacleAssets ?? []).map((asset) => ({ ...asset, lightBoostScale: 1.9 })),
         ].filter(Boolean);
         gameplayAssets.forEach(({ mesh, lightBoostScale = 1 }) => {
           mesh.worldModifier = undefined;
@@ -5578,8 +5578,8 @@ function startSparkViewer() {
         this.gameBall = ballAsset.mesh;
         this.gameBallSplatRoot = ballAsset.root;
         this.gameSceneRoot.add(this.gameBallSplatRoot);
-        this.gameBallLight = new THREE.PointLight(0xffffff, 11, 3.0, 2);
-        this.gameBallLight.position.set(0, 1.05, 0);
+        this.gameBallLight = new THREE.PointLight(0xffffff, 8.5, 1.55, 2);
+        this.gameBallLight.position.set(0, 0.58, 0);
         this.gameSceneRoot.add(this.gameBallLight);
 
         this.gameGoal = new THREE.Mesh(
@@ -5773,7 +5773,7 @@ function startSparkViewer() {
         this.gameBallSplatRoot.position.set(position.x, position.y, position.z);
         this.gameShadow.visible = position.y > 0.08;
         this.gameShadow.position.set(position.x, 0.03, position.z);
-        this.gameBallLight?.position.set(position.x, position.y + 0.9, position.z);
+        this.gameBallLight?.position.set(position.x, position.y + 0.42, position.z);
         if (this.sceneItems.length > 0) {
           this.syncLightingRuntimeState();
           this.syncGameplaySplatLightModifiers();

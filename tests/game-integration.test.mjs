@@ -67,9 +67,9 @@ test('viewer starts in play mode with grid and axes helpers disabled by default'
 
 test('viewer starts with scene exposure at -5 and adds a lower, softer ball-following point light for gameplay', () => {
   assert.match(viewerSource, /exposure:\s*-5,/);
-  assert.match(viewerSource, /this\.gameBallLight = new THREE\.PointLight\(0xffffff, 11(?:\.0)?, 3\.0, 2\);/);
-  assert.match(viewerSource, /this\.gameBallLight\.position\.set\(0, 1\.05, 0\);/);
-  assert.match(viewerSource, /this\.gameBallLight\?\.position\.set\(position\.x, position\.y \+ 0\.9, position\.z\);/);
+  assert.match(viewerSource, /this\.gameBallLight = new THREE\.PointLight\(0xffffff, 8\.5, 1\.55, 2\);/);
+  assert.match(viewerSource, /this\.gameBallLight\.position\.set\(0, 0\.58, 0\);/);
+  assert.match(viewerSource, /this\.gameBallLight\?\.position\.set\(position\.x, position\.y \+ 0\.42, position\.z\);/);
   assert.match(viewerSource, /const ambient = new THREE\.AmbientLight\(0xffffff, 0\.02\);/);
   assert.match(viewerSource, /const key = new THREE\.DirectionalLight\(0xffffff, 0\.08\);/);
   assert.match(viewerSource, /new THREE\.MeshStandardMaterial\(\{ color: 0x7df0ff, emissive: 0x030c10, roughness: 0\.72, metalness: 0\.03 \}\)/);
@@ -81,9 +81,9 @@ test('viewer starts with scene exposure at -5 and adds a lower, softer ball-foll
   assert.match(viewerSource, /lightBoostScale = 1,/);
   assert.match(viewerSource, /const lightStrength = mul\(mul\(lightIntensity, lightBoostScaleValue\), div\(lightRangeSq, add\(lightDistanceSq, lightRangeSq\)\)\);/);
   assert.match(viewerSource, /syncGameplaySplatLightModifiers\(\)/);
-  assert.match(viewerSource, /this\.gameBall\s*\?\s*\{ mesh: this\.gameBall, lightBoostScale: 1\.0 \}\s*:\s*null/);
+  assert.match(viewerSource, /this\.gameBall\s*\?\s*\{ mesh: this\.gameBall, lightBoostScale: 2\.2 \}\s*:\s*null/);
+  assert.match(viewerSource, /\.{3}\(this\.gameSplatObstacleAssets \?\? \[\]\)\.map\(\(asset\) => \(\{ \.\.\.asset, lightBoostScale: 1\.9 \}\)\),/);
   assert.match(viewerSource, /mesh\.worldModifiers = this\.buildActivePointLightWorldModifiers\(null, \{ lightBoostScale \}\);/);
-  assert.match(viewerSource, /\.{3}\(this\.gameSplatObstacleAssets \?\? \[\]\),/);
 });
 
 test('viewer hides the shadow and keeps stepping while a falling run leaves the stage', () => {
