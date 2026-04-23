@@ -16,6 +16,9 @@ export const DEFAULT_GAME_CONFIG = {
 export function createDefaultStage(overrides = {}) {
   const stage = {
     dropOnExit: true,
+    floorRadius: 4.4,
+    rimInnerRadius: 4.1,
+    rimOuterRadius: 4.35,
     fallResetY: -2.8,
     spawn: { x: -2.4, y: 0.35, z: -2.1 },
     bounds: {
@@ -282,10 +285,18 @@ export function stepGameState(state, inputVector = { x: 0, z: 0 }, dt = 1 / 60, 
     const maxZ = stage.bounds.maxZ - ball.radius;
 
     if (stage.dropOnExit) {
-      const hasLeftStage = ball.position.x < minX
-        || ball.position.x > maxX
-        || ball.position.z < minZ
-        || ball.position.z > maxZ;
+      const dropRadius = Math.max(
+        0.001,
+        Number(stage.dropRadius)
+          || (Number(stage.rimInnerRadius) || Number(stage.floorRadius) || Math.max(
+            Math.abs(stage.bounds.maxX),
+            Math.abs(stage.bounds.minX),
+            Math.abs(stage.bounds.maxZ),
+            Math.abs(stage.bounds.minZ),
+          )) - ball.radius,
+      );
+      const distanceFromCenter = length2(ball.position.x, ball.position.z);
+      const hasLeftStage = distanceFromCenter > dropRadius;
       if (hasLeftStage) {
         ball.acceleration = { x: 0, y: -fallAcceleration, z: 0 };
         ball.velocity.y = Math.min(ball.velocity.y, -0.35);

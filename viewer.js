@@ -1426,10 +1426,10 @@ function startSparkViewer() {
           selectedExposure: 0,
           shLevel: 3,
           sceneListLimit: 6,
-          showAxes: true,
+          showAxes: false,
           showBounds: false,
           showGizmo: false,
-          showGrid: true,
+          showGrid: false,
           transformGizmoMode: "translate",
           viewMode: "play",
         };
@@ -3065,7 +3065,7 @@ function startSparkViewer() {
 
       syncGameplaySplatLightModifiers() {
         const gameplayAssets = [
-          this.gameBall ? { mesh: this.gameBall, lightBoostScale: 1.18 } : null,
+          this.gameBall ? { mesh: this.gameBall, lightBoostScale: 1.0 } : null,
           ...(this.gameSplatObstacleAssets ?? []),
         ].filter(Boolean);
         gameplayAssets.forEach(({ mesh, lightBoostScale = 1 }) => {
@@ -5540,18 +5540,21 @@ function startSparkViewer() {
       }
 
       async setupGameplayScene() {
-        const planeGeometry = new THREE.CircleGeometry(4.4, 64);
+        const floorRadius = this.gameStage?.floorRadius ?? 4.4;
+        const rimInnerRadius = this.gameStage?.rimInnerRadius ?? 4.1;
+        const rimOuterRadius = this.gameStage?.rimOuterRadius ?? 4.35;
+        const planeGeometry = new THREE.CircleGeometry(floorRadius, 64);
         const planeMaterial = new THREE.MeshStandardMaterial({
           color: 0x10202b,
-          metalness: 0.08,
-          roughness: 0.9,
+          metalness: 0.05,
+          roughness: 0.94,
         });
         this.gameFloor = new THREE.Mesh(planeGeometry, planeMaterial);
         this.gameFloor.rotation.x = -Math.PI / 2;
         this.gameFloor.position.y = 0.01;
         this.gameSceneRoot.add(this.gameFloor);
 
-        const rimGeometry = new THREE.RingGeometry(4.1, 4.35, 64);
+        const rimGeometry = new THREE.RingGeometry(rimInnerRadius, rimOuterRadius, 64);
         const rimMaterial = new THREE.MeshBasicMaterial({
           color: 0x61d8bc,
           opacity: 0.25,
@@ -5575,8 +5578,8 @@ function startSparkViewer() {
         this.gameBall = ballAsset.mesh;
         this.gameBallSplatRoot = ballAsset.root;
         this.gameSceneRoot.add(this.gameBallSplatRoot);
-        this.gameBallLight = new THREE.PointLight(0xffffff, 28, 4.2, 2);
-        this.gameBallLight.position.set(0, 1.7, 0);
+        this.gameBallLight = new THREE.PointLight(0xffffff, 11, 3.0, 2);
+        this.gameBallLight.position.set(0, 1.05, 0);
         this.gameSceneRoot.add(this.gameBallLight);
 
         this.gameGoal = new THREE.Mesh(
@@ -5603,7 +5606,7 @@ function startSparkViewer() {
         this.gameMeshObstacleMeshes = this.gameStage.meshObstacles.map((obstacle) => {
           const mesh = new THREE.Mesh(
             new THREE.BoxGeometry(obstacle.radius * 1.4, 0.52, obstacle.radius * 1.4),
-            new THREE.MeshStandardMaterial({ color: 0x7df0ff, emissive: 0x0b2430, roughness: 0.24, metalness: 0.22 }),
+            new THREE.MeshStandardMaterial({ color: 0x7df0ff, emissive: 0x030c10, roughness: 0.72, metalness: 0.03 }),
           );
           mesh.position.set(obstacle.x, 0.26, obstacle.z);
           mesh.rotation.y = Math.PI / 5;
@@ -5611,8 +5614,8 @@ function startSparkViewer() {
           return mesh;
         });
 
-        const ambient = new THREE.AmbientLight(0xffffff, 0.04);
-        const key = new THREE.DirectionalLight(0xffffff, 0.18);
+        const ambient = new THREE.AmbientLight(0xffffff, 0.02);
+        const key = new THREE.DirectionalLight(0xffffff, 0.08);
         key.position.set(4, 7, 5);
         this.gameSceneRoot.add(ambient);
         this.gameSceneRoot.add(key);
@@ -5770,7 +5773,7 @@ function startSparkViewer() {
         this.gameBallSplatRoot.position.set(position.x, position.y, position.z);
         this.gameShadow.visible = position.y > 0.08;
         this.gameShadow.position.set(position.x, 0.03, position.z);
-        this.gameBallLight?.position.set(position.x, position.y + 1.55, position.z);
+        this.gameBallLight?.position.set(position.x, position.y + 0.9, position.z);
         if (this.sceneItems.length > 0) {
           this.syncLightingRuntimeState();
           this.syncGameplaySplatLightModifiers();

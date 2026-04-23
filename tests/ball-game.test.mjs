@@ -89,6 +89,28 @@ test('stepGameState clamps the ball inside the stage walls and bounces velocity'
   assert.ok(next.ball.velocity.x < 0, `expected reflected x velocity, got ${next.ball.velocity.x}`);
 });
 
+test('stepGameState lets the ball reach the visible rim before falling on the circular platform', () => {
+  const stage = createDefaultStage();
+  const initial = createDefaultGameState(stage);
+  const nearRimState = {
+    ...initial,
+    status: 'playing',
+    ball: {
+      ...initial.ball,
+      position: { x: stage.rimInnerRadius - initial.ball.radius - 0.04, y: stage.spawn.y, z: 0 },
+      velocity: { x: 0.12, y: 0, z: 0 },
+    },
+  };
+
+  const next = stepGameState(nearRimState, { x: 0, z: 0 }, 1 / 60, DEFAULT_GAME_CONFIG);
+
+  assert.notEqual(next.status, 'falling');
+  assert.ok(
+    Math.hypot(next.ball.position.x, next.ball.position.z) <= stage.rimInnerRadius + 1e-6,
+    `expected the ball to stay on the visible platform, got radius ${Math.hypot(next.ball.position.x, next.ball.position.z)}`,
+  );
+});
+
 test('stepGameState lets the ball fall off the stage and restarts from spawn after it drops below the reset height', () => {
   const stage = createDefaultStage({
     fallResetY: -1.4,
@@ -101,7 +123,7 @@ test('stepGameState lets the ball fall off the stage and restarts from spawn aft
     elapsedMs: 880,
     ball: {
       ...initial.ball,
-      position: { x: stage.bounds.maxX + 0.12, y: stage.spawn.y, z: stage.spawn.z },
+      position: { x: stage.rimInnerRadius + 0.18, y: stage.spawn.y, z: 0 },
       velocity: { x: 0.9, y: 0, z: 0.1 },
     },
   };

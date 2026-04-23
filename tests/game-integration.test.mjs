@@ -60,13 +60,19 @@ test('viewer uses an opaque gameplay floor mesh to avoid translucent base flicke
   assert.doesNotMatch(viewerSource, /const planeMaterial = new THREE\.MeshBasicMaterial\(\{[\s\S]*?opacity: 0\.36,[\s\S]*?transparent: true,[\s\S]*?\}\);/);
 });
 
-test('viewer starts with scene exposure at -5 and adds a ball-following point light for gameplay', () => {
+test('viewer starts in play mode with grid and axes helpers disabled by default', () => {
+  assert.match(viewerSource, /showAxes:\s*false,/);
+  assert.match(viewerSource, /showGrid:\s*false,/);
+});
+
+test('viewer starts with scene exposure at -5 and adds a lower, softer ball-following point light for gameplay', () => {
   assert.match(viewerSource, /exposure:\s*-5,/);
-  assert.match(viewerSource, /this\.gameBallLight = new THREE\.PointLight\(0xffffff, 28(?:\.0)?, 4\.2, 2\);/);
-  assert.match(viewerSource, /this\.gameBallLight\.position\.set\(0, 1\.7, 0\);/);
-  assert.match(viewerSource, /this\.gameBallLight\?\.position\.set\(position\.x, position\.y \+ 1\.55, position\.z\);/);
-  assert.match(viewerSource, /const ambient = new THREE\.AmbientLight\(0xffffff, 0\.04\);/);
-  assert.match(viewerSource, /const key = new THREE\.DirectionalLight\(0xffffff, 0\.18\);/);
+  assert.match(viewerSource, /this\.gameBallLight = new THREE\.PointLight\(0xffffff, 11(?:\.0)?, 3\.0, 2\);/);
+  assert.match(viewerSource, /this\.gameBallLight\.position\.set\(0, 1\.05, 0\);/);
+  assert.match(viewerSource, /this\.gameBallLight\?\.position\.set\(position\.x, position\.y \+ 0\.9, position\.z\);/);
+  assert.match(viewerSource, /const ambient = new THREE\.AmbientLight\(0xffffff, 0\.02\);/);
+  assert.match(viewerSource, /const key = new THREE\.DirectionalLight\(0xffffff, 0\.08\);/);
+  assert.match(viewerSource, /new THREE\.MeshStandardMaterial\(\{ color: 0x7df0ff, emissive: 0x030c10, roughness: 0\.72, metalness: 0\.03 \}\)/);
   assert.match(viewerSource, /const gameplayLight = this\.getGameplaySplatLightRecord\(\);/);
   assert.match(viewerSource, /if \(gameplayLight\) \{\s*activeLights\.push\(gameplayLight\);\s*\}/);
   assert.match(viewerSource, /const gameplayLightRange = this\.gameBallLight\.distance > 0\s*\? this\.gameBallLight\.distance\s*:\s*Math\.max\(this\.sceneBoundsSphere\?\.radius \?\? 1, 3\.5\) \* 2;/);
@@ -75,7 +81,7 @@ test('viewer starts with scene exposure at -5 and adds a ball-following point li
   assert.match(viewerSource, /lightBoostScale = 1,/);
   assert.match(viewerSource, /const lightStrength = mul\(mul\(lightIntensity, lightBoostScaleValue\), div\(lightRangeSq, add\(lightDistanceSq, lightRangeSq\)\)\);/);
   assert.match(viewerSource, /syncGameplaySplatLightModifiers\(\)/);
-  assert.match(viewerSource, /this\.gameBall\s*\?\s*\{ mesh: this\.gameBall, lightBoostScale: 1\.18 \}\s*:\s*null/);
+  assert.match(viewerSource, /this\.gameBall\s*\?\s*\{ mesh: this\.gameBall, lightBoostScale: 1\.0 \}\s*:\s*null/);
   assert.match(viewerSource, /mesh\.worldModifiers = this\.buildActivePointLightWorldModifiers\(null, \{ lightBoostScale \}\);/);
   assert.match(viewerSource, /\.{3}\(this\.gameSplatObstacleAssets \?\? \[\]\),/);
 });
